@@ -1,0 +1,24 @@
+[project]
+name = "bot"
+version = "1.0.0"
+description = "Telegram bot chatbot using AIOgram and Azure API."
+authors = [{ name = "Hitalo" }]
+dependencies = [
+    "aiogram[I18n,fast]>=3.19.0",
+    "aiohttp[speedups]>=3.11.14",
+    "azure-ai-inference>=1.0.0b9",
+    "pydantic-settings>=2.8.1",
+    "tortoise-orm>=0.24.2",
+    "chatgpt-md-converter>=0.2.0",
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = ["pre-commit>=4.2.0", "ruff>=0.11.2"]
