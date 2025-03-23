@@ -19,13 +19,21 @@ from azure.core.exceptions import HttpResponseError
 
 from bot import config
 
-from .models import AIModel
+from .models import DEFAULT_MODEL, AIModel
 from .system_message import get_system_message
 
 logger = logging.getLogger(__name__)
 
 
 class ChatAPIError(Exception):
+    """
+    Exception raised for errors encountered during chat API requests.
+    """
+
+    pass
+
+
+class ChatRateLimitError(ChatAPIError):
     """
     Exception raised for errors encountered during chat API requests.
     """
@@ -76,6 +84,43 @@ async def _complete_chat(messages: list[ChatRequestMessage], model: AIModel) -> 
     return response.choices[0].message.content
 
 
+async def _try_complete(messages: list[ChatRequestMessage], fallback_models: list[AIModel]) -> str:
+    """
+    Attempts to complete a chat request using a list of fallback AI models.
+
+    This function iterates through the provided fallback models and tries to
+    complete the chat request using each model. If a model encounters a rate
+    limit error (HTTP 429), it logs a warning and continues to the next model.
+    If all models fail, an exception is raised.
+
+    Args:
+        messages (list[ChatRequestMessage]): A list of chat request messages to be processed.
+        fallback_models (list[AIModel]): A list of AI models to use as fallbacks for the chat
+            completion.
+
+    Returns:
+        str: The completed chat response.
+
+    Raises:
+        ChatRateLimitError: If the GPT-4O-Mini model specifically encounters a rate limit error.
+        ChatAPIError: If all models fail to complete the chat request or if another API
+            error occurs.
+    """
+    for model in fallback_models:
+        try:
+            return await _complete_chat(messages, model)
+        except ChatAPIError as e:
+            if "429" in str(e):
+                logger.warning("Rate limit reached for model %s.", model.value)
+                if model == AIModel.GPT_4O_MINI:
+                    msg = "Rate limit reached for GPT-4O-Mini. Please try again later."
+                    raise ChatRateLimitError(msg) from e
+                continue
+            raise
+    msg = "All models failed."
+    raise ChatAPIError(msg)
+
+
 async def query_azure_chat(messages: list[ChatRequestMessage], user: User, model: AIModel) -> str:
     """
     Query the Azure ChatCompletions API with a text-based message.
@@ -90,7 +135,8 @@ async def query_azure_chat(messages: list[ChatRequestMessage], user: User, model
     """
     system_message = get_system_message(user)
     messages_with_system = [system_message, *messages]
-    return await _complete_chat(messages_with_system, model)
+    fallback_models = [model, AIModel.GPT_4O_MINI] if model != AIModel.GPT_4O_MINI else [model]
+    return await _try_complete(messages_with_system, fallback_models)
 
 
 async def query_azure_chat_with_image(
@@ -115,7 +161,7 @@ async def query_azure_chat_with_image(
         AIModel.O1_MINI,
         AIModel.O3_MINI,
     }:
-        model = AIModel.GPT_4O_MINI
+        model = DEFAULT_MODEL
 
     system_message = get_system_message(user)
     message_text = TextContentItem(text=query_text)
@@ -128,4 +174,5 @@ async def query_azure_chat_with_image(
     )
     user_message = UserMessage(content=[message_text, image_item])
     messages = [system_message, user_message]
-    return await _complete_chat(messages, model)
+    fallback_models = [model, AIModel.GPT_4O_MINI] if model != AIModel.GPT_4O_MINI else [model]
+    return await _try_complete(messages, fallback_models)

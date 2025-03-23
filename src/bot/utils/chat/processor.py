@@ -15,11 +15,9 @@ from bot.database.models import Conversation
 from .client import query_azure_chat, query_azure_chat_with_image
 from .context import build_reply_context
 from .history import clear_conversation_history, get_conversation_history
-from .models import AIModel
+from .models import DEFAULT_MODEL, AIModel
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MODEL = AIModel.GPT_4O
 
 RE_MODEL = re.compile(r"use:\s*(\S+)", flags=re.IGNORECASE)
 RE_CLEAN = re.compile(r"use:\s*\S+|/\S+", flags=re.IGNORECASE)

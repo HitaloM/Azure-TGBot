@@ -38,3 +38,6 @@ class AIModel(StrEnum):
             list[str]: A list containing the string values of all defined AI models.
         """
         return [model.value for model in cls]
+
+
+DEFAULT_MODEL = AIModel.GPT_4O
