@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
-import logging
 import re
 import tempfile
 from pathlib import Path
@@ -12,12 +11,10 @@ from chatgpt_md_converter import telegram_format
 
 from bot.database.models import Conversation
 
-from .client import query_azure_chat, query_azure_chat_with_image
+from .client import ChatAPIError, query_azure_chat, query_azure_chat_with_image
 from .context import build_reply_context
 from .history import clear_conversation_history, get_conversation_history
 from .models import DEFAULT_MODEL, AIModel
-
-logger = logging.getLogger(__name__)
 
 RE_MODEL = re.compile(r"use:\s*(\S+)", flags=re.IGNORECASE)
 RE_CLEAN = re.compile(r"use:\s*\S+|/\S+", flags=re.IGNORECASE)
@@ -46,6 +43,12 @@ def parse_and_get_model(text: str) -> tuple[str, AIModel]:
     )
     clean_text = RE_CLEAN.sub("", text).strip()
     return clean_text, model
+
+
+def clean_error_message(msg: str) -> str:
+    if "(content_filter)" in msg:
+        return msg.split("\n")[0].replace("(content_filter)", "").strip()
+    return msg
 
 
 async def process_media_message(message: Message, target_message: Message) -> None:
@@ -80,12 +83,20 @@ async def process_media_message(message: Message, target_message: Message) -> No
     local_filename = Path(tmp_dir) / Path(file_obj.file_path).name  # type: ignore
     await target_message.bot.download_file(file_obj.file_path, destination=local_filename)  # type: ignore
 
-    response = await query_azure_chat_with_image(
-        str(local_filename),
-        clean_text,
-        message.from_user,  # type: ignore
-        model,
-    )
+    try:
+        response = await query_azure_chat_with_image(
+            str(local_filename),
+            clean_text,
+            message.from_user,  # type: ignore
+            model,
+        )
+    except ChatAPIError as chat_err:
+        await message.answer(clean_error_message(chat_err.message))
+        return
+    except Exception as error:
+        await message.answer(str(error))
+        return
+
     if response:
         clean_response = RE_THINK.sub("", response).strip()
         full_response = f"[✨ {model.value}] {clean_response}"
@@ -157,7 +168,6 @@ async def process_message(message: Message, model: AIModel) -> str | None:
     """
     input_text = (message.text or message.caption).strip()  # type: ignore
     if not input_text:
-        logger.info("Received an empty message; no response will be generated.")
         return None
 
     user_id = message.from_user.id  # type: ignore
@@ -172,8 +182,9 @@ async def process_message(message: Message, model: AIModel) -> str | None:
             model=model,
         )
         full_response = f"[✨ {model.value}] {reply_text}"
+    except ChatAPIError as chat_err:
+        return clean_error_message(chat_err.message)
     except Exception as error:
-        logger.exception("Failed to get a response from Azure Chat API: %s", error)
         return str(error)
 
     await save_message(user_id, input_text, reply_text)
