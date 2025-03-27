@@ -89,7 +89,7 @@ async def _complete_chat(messages: list[ChatRequestMessage], model: AIModel) -> 
         async with ChatCompletionsClient(
             endpoint=str(config.azure_endpoint),
             credential=AzureKeyCredential(config.azure_api_key.get_secret_value()),
-            api_version="2024-12-01-preview",
+            api_version="2025-03-01-preview",
         ) as client:
             response = await client.complete(messages=messages, model=model.value)
     except HttpResponseError as e:
