@@ -166,7 +166,11 @@ async def process_message(message: Message, model: AIModel) -> str | None:
     Returns:
         str | None: The full formatted response if successful, or None if the message is empty.
     """
-    input_text = (message.text or message.caption).strip()  # type: ignore
+    text_content = message.text or message.caption  # type: ignore
+    if not text_content:
+        return None
+
+    input_text = text_content.strip()
     if not input_text:
         return None
 
