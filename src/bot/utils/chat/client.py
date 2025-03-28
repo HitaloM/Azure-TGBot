@@ -166,12 +166,25 @@ class CustomRetryPolicy(RetryPolicy):
         return response
 
 
-AZURE_CLIENT = ChatCompletionsClient(
-    endpoint=str(config.azure_endpoint),
-    credential=AzureKeyCredential(config.azure_api_key.get_secret_value()),
-    api_version="2025-03-01-preview",
-    per_retry_policies=[CustomRetryPolicy()],
-)
+def get_azure_client() -> ChatCompletionsClient:
+    """
+    Creates and returns an instance of the ChatCompletionsClient configured for Azure OpenAI.
+
+    This function initializes the client with the specified endpoint, API key, API version,
+    and a custom retry policy.
+
+    Returns:
+        ChatCompletionsClient: An instance of the Azure OpenAI ChatCompletionsClient.
+
+    Raises:
+        ValueError: If the configuration values (e.g., endpoint or API key) are invalid.
+    """
+    return ChatCompletionsClient(
+        endpoint=str(config.azure_endpoint),
+        credential=AzureKeyCredential(config.azure_api_key.get_secret_value()),
+        api_version="2025-03-01-preview",
+        per_retry_policies=[CustomRetryPolicy()],
+    )
 
 
 IMAGE_SUPPORTED_MODELS: set[AIModel] = {
@@ -315,7 +328,9 @@ async def _complete_chat(
     return selected_message.content
 
 
-async def query_azure_chat(messages: list[ChatRequestMessage], user: User, model: AIModel) -> str:
+async def query_azure_chat(
+    messages: list[ChatRequestMessage], user: User, model: AIModel
+) -> tuple[str, AIModel]:
     """
     Queries the Azure chat service using a list of messages and returns the response.
 
@@ -328,17 +343,26 @@ async def query_azure_chat(messages: list[ChatRequestMessage], user: User, model
         model (AIModel): The AI model to be used for the conversation.
 
     Returns:
-        str: The response from the Azure chat service.
+        tuple[str, AIModel]: The response from the Azure chat service and the model used.
     """
     system_message = get_system_message(user)
     messages_with_system = [system_message, *messages]
-    async with AZURE_CLIENT as client:
-        return await _complete_chat(messages_with_system, model, client)
+    try:
+        async with get_azure_client() as client:
+            reply = await _complete_chat(messages_with_system, model, client)
+            return reply, model
+    except HttpResponseError as error:
+        if error.status_code == 429 and model == AIModel.GPT_4O:
+            fallback_model = AIModel.GPT_4O_MINI
+            async with get_azure_client() as client:
+                reply = await _complete_chat(messages_with_system, fallback_model, client)
+                return reply, fallback_model
+        raise
 
 
 async def query_azure_chat_with_image(
     image_path: str, query_text: str, user: User, model: AIModel
-) -> str:
+) -> tuple[str, AIModel]:
     """
     Queries an Azure chat model with a combination of image and text.
 
@@ -352,7 +376,7 @@ async def query_azure_chat_with_image(
         model (AIModel): The AI model to be used for the query.
 
     Returns:
-        str: The response from the Azure chat service.
+        tuple[str, AIModel]: The response from the Azure chat service and the model used.
     """
     if model not in IMAGE_SUPPORTED_MODELS:
         model = DEFAULT_MODEL
@@ -367,5 +391,14 @@ async def query_azure_chat_with_image(
     )
     user_message = UserMessage(content=[message_text, image_item])
     messages = [system_message, user_message]
-    async with AZURE_CLIENT as client:
-        return await _complete_chat(messages, model, client)
+    try:
+        async with get_azure_client() as client:
+            reply = await _complete_chat(messages, model, client)
+            return reply, model
+    except HttpResponseError as error:
+        if error.status_code == 429 and model == AIModel.GPT_4O:
+            fallback_model = AIModel.GPT_4O_MINI
+            async with get_azure_client() as client:
+                reply = await _complete_chat(messages, fallback_model, client)
+                return reply, fallback_model
+        raise

@@ -108,7 +108,7 @@ async def process_media_message(message: Message, target_message: Message) -> No
     await target_message.bot.download_file(file_obj.file_path, destination=local_filename)  # type: ignore
 
     try:
-        response = await query_azure_chat_with_image(
+        response, used_model = await query_azure_chat_with_image(
             str(local_filename),
             clean_text,
             message.from_user,  # type: ignore
@@ -123,7 +123,7 @@ async def process_media_message(message: Message, target_message: Message) -> No
 
     if response:
         clean_response = RE_THINK.sub("", response).strip()
-        full_response = f"[✨ {model.value}] {clean_response}"
+        full_response = f"[✨ {used_model.value}] {clean_response}"
         await message.answer(telegram_format(full_response))
         await save_message(message.from_user.id, clean_text, clean_response)  # type: ignore
         return
@@ -204,12 +204,12 @@ async def process_message(message: Message, model: AIModel) -> str | None:
     conversation_context = [*chat_history, UserMessage(content=updated_prompt)]
 
     try:
-        reply_text = await query_azure_chat(
+        reply_text, used_model = await query_azure_chat(
             messages=conversation_context,
             user=message.from_user,  # type: ignore
             model=model,
         )
-        full_response = f"[✨ {model.value}] {reply_text}"
+        full_response = f"[✨ {used_model.value}] {reply_text}"
     except HttpResponseError as chat_err:
         return clean_error_message(chat_err.message)
     except Exception as error:
