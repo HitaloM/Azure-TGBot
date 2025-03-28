@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     bot_token: SecretStr
     azure_api_key: SecretStr
     azure_endpoint: AnyHttpUrl = AnyHttpUrl("https://models.inference.ai.azure.com")
+    bing_api_key: SecretStr
     sudoers: ClassVar[list[int]] = [918317361]
 
     @property

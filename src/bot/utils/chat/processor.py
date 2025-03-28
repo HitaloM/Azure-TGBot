@@ -7,17 +7,18 @@ from pathlib import Path
 
 from aiogram.types import Message
 from azure.ai.inference.models import UserMessage
+from azure.core.exceptions import HttpResponseError
 from chatgpt_md_converter import telegram_format
 
 from bot.database.models import Conversation
 
-from .client import ChatAPIError, query_azure_chat, query_azure_chat_with_image
+from .client import DEFAULT_MODEL, query_azure_chat, query_azure_chat_with_image
 from .context import build_reply_context
 from .history import clear_conversation_history, get_conversation_history
-from .models import DEFAULT_MODEL, AIModel
+from .models import AIModel
 
 RE_MODEL = re.compile(r"use:\s*(\S+)", flags=re.IGNORECASE)
-RE_CLEAN = re.compile(r"use:\s*\S+|/\S+", flags=re.IGNORECASE)
+RE_CLEAN = re.compile(r"use:\s*\S+", flags=re.IGNORECASE)
 RE_THINK = re.compile(r"<think>.*?</think>", flags=re.DOTALL | re.IGNORECASE)
 
 MODEL_MAPPING = {model.value.lower(): model for model in AIModel}
@@ -46,6 +47,22 @@ def parse_and_get_model(text: str) -> tuple[str, AIModel]:
 
 
 def clean_error_message(msg: str) -> str:
+    """
+    Cleans up an error message by removing specific markers and unnecessary content.
+
+    If the message contains the marker "(content_filter)", this function will:
+    - Extract the first line of the message.
+    - Remove the "(content_filter)" marker.
+    - Strip any leading or trailing whitespace.
+
+    If the marker is not present, the original message is returned unchanged.
+
+    Args:
+        msg (str): The error message to be cleaned.
+
+    Returns:
+        str: The cleaned error message.
+    """
     if "(content_filter)" in msg:
         return msg.split("\n")[0].replace("(content_filter)", "").strip()
     return msg
@@ -90,7 +107,7 @@ async def process_media_message(message: Message, target_message: Message) -> No
             message.from_user,  # type: ignore
             model,
         )
-    except ChatAPIError as chat_err:
+    except HttpResponseError as chat_err:
         await message.answer(clean_error_message(chat_err.message))
         return
     except Exception as error:
@@ -186,7 +203,7 @@ async def process_message(message: Message, model: AIModel) -> str | None:
             model=model,
         )
         full_response = f"[✨ {model.value}] {reply_text}"
-    except ChatAPIError as chat_err:
+    except HttpResponseError as chat_err:
         return clean_error_message(chat_err.message)
     except Exception as error:
         return str(error)
