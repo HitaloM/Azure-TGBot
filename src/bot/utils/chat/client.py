@@ -125,6 +125,7 @@ class CustomRetryPolicy(RetryPolicy):
                 response = await self.next.send(request)  # type: ignore
 
                 if response.http_response.status_code == 429:
+                    print(response.http_response)
                     raise HttpResponseError(
                         message="Too many requests", response=response.http_response
                     )

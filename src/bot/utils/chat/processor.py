@@ -55,7 +55,12 @@ def clean_error_message(msg: str) -> str:
     - Remove the "(content_filter)" marker.
     - Strip any leading or trailing whitespace.
 
-    If the marker is not present, the original message is returned unchanged.
+    If the message contains the marker "(RateLimitReached)", this function will:
+    - Extract the first line of the message.
+    - Remove the "(RateLimitReached)" marker.
+    - Strip any leading or trailing whitespace.
+
+    If neither marker is present, the original message is returned unchanged.
 
     Args:
         msg (str): The error message to be cleaned.
@@ -65,6 +70,8 @@ def clean_error_message(msg: str) -> str:
     """
     if "(content_filter)" in msg:
         return msg.split("\n")[0].replace("(content_filter)", "").strip()
+    if "(RateLimitReached)" in msg:
+        return msg.split("\n")[0].replace("(RateLimitReached)", "").strip()
     return msg
 
 
