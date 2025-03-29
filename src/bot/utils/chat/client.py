@@ -3,7 +3,6 @@
 
 import logging
 import time
-from collections.abc import Callable
 from inspect import iscoroutinefunction
 from pathlib import Path
 
@@ -41,9 +40,7 @@ from bot import config
 
 from .models import AIModel
 from .system_message import get_system_message
-from .tools.bing_search import bing_search
-from .tools.open_web_results import open_url, open_web_results
-from .tools.schema import TOOLS
+from .tools.schema import TOOL_HANDLERS, TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +122,6 @@ class CustomRetryPolicy(RetryPolicy):
                 response = await self.next.send(request)  # type: ignore
 
                 if response.http_response.status_code == 429:
-                    print(response.http_response)
                     raise HttpResponseError(
                         message="Too many requests", response=response.http_response
                     )
@@ -185,21 +181,6 @@ def get_azure_client() -> ChatCompletionsClient:
         api_version="2025-03-01-preview",
         per_retry_policies=[CustomRetryPolicy()],
     )
-
-
-IMAGE_SUPPORTED_MODELS: set[AIModel] = {
-    AIModel.GPT_4O,
-    AIModel.GPT_4O_MINI,
-    AIModel.O1,
-    AIModel.O1_MINI,
-    AIModel.O3_MINI,
-}
-
-TOOL_HANDLERS: dict[str, Callable] = {
-    "bing-search": bing_search,
-    "open-web-results": open_web_results,
-    "open-url": open_url,
-}
 
 
 async def _execute_tool_call(function_name: str, arguments: dict) -> str:
@@ -378,7 +359,15 @@ async def query_azure_chat_with_image(
     Returns:
         tuple[str, AIModel]: The response from the Azure chat service and the model used.
     """
-    if model not in IMAGE_SUPPORTED_MODELS:
+    supported_models: set[AIModel] = {
+        AIModel.GPT_4O,
+        AIModel.GPT_4O_MINI,
+        AIModel.O1,
+        AIModel.O1_MINI,
+        AIModel.O3_MINI,
+    }
+
+    if model not in supported_models:
         model = DEFAULT_MODEL
 
     system_message = get_system_message(user)

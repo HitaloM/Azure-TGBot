@@ -10,8 +10,9 @@ dependencies = [
     "pydantic-settings>=2.8.1",
     "tortoise-orm>=0.24.2",
     "chatgpt-md-converter>=0.2.0",
-    "bs4>=0.0.2",
     "orjson>=3.10.16",
+    "lxml>=5.3.1",
+    "azure-cognitiveservices-search-websearch>=2.0.1",
 ]
 readme = "README.md"
 license = { file = "LICENSE" }
