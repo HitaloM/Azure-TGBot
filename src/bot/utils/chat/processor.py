@@ -72,6 +72,8 @@ def clean_error_message(msg: str) -> str:
         return msg.split("\n")[0].replace("(content_filter)", "").strip()
     if "(RateLimitReached)" in msg:
         return msg.split("\n")[0].replace("(RateLimitReached)", "").strip()
+    if "(tokens_limit_reached)" in msg:
+        return msg.split("\n")[0].replace("(tokens_limit_reached)", "").strip()
     return msg
 
 
