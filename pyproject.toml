@@ -12,7 +12,6 @@ dependencies = [
     "chatgpt-md-converter>=0.2.0",
     "orjson>=3.10.16",
     "lxml>=5.3.1",
-    "azure-cognitiveservices-search-websearch>=2.0.1",
 ]
 readme = "README.md"
 license = { file = "LICENSE" }

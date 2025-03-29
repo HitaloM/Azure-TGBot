@@ -5,7 +5,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from aiogram.types import Message
+from aiogram.types import File, Message
 from azure.ai.inference.models import UserMessage
 from azure.core.exceptions import HttpResponseError
 from chatgpt_md_converter import telegram_format
@@ -16,12 +16,34 @@ from .client import DEFAULT_MODEL, query_azure_chat, query_azure_chat_with_image
 from .context import build_reply_context
 from .history import clear_conversation_history, get_conversation_history
 from .models import AIModel
+from .text_utils import split_text_with_formatting
 
 RE_MODEL = re.compile(r"use:\s*(\S+)", flags=re.IGNORECASE)
 RE_CLEAN = re.compile(r"use:\s*\S+", flags=re.IGNORECASE)
 RE_THINK = re.compile(r"<think>.*?</think>", flags=re.DOTALL | re.IGNORECASE)
 
 MODEL_MAPPING = {model.value.lower(): model for model in AIModel}
+
+
+async def _get_media_file(target_message: Message) -> File | None:
+    """
+    Asynchronously retrieves a media file from a given message.
+
+    This function checks if the provided message contains a photo or a sticker
+    and retrieves the corresponding file from the bot's server.
+
+    Args:
+        target_message (Message): The message object to extract the media file from.
+
+    Returns:
+        File | None: The retrieved media file if the message contains a photo or
+        sticker, otherwise None.
+    """
+    if target_message.photo:
+        return await target_message.bot.get_file(target_message.photo[-1].file_id)  # type: ignore
+    if target_message.sticker:
+        return await target_message.bot.get_file(target_message.sticker.file_id)  # type: ignore
+    return None
 
 
 def parse_and_get_model(text: str) -> tuple[str, AIModel]:
@@ -48,19 +70,13 @@ def parse_and_get_model(text: str) -> tuple[str, AIModel]:
 
 def clean_error_message(msg: str) -> str:
     """
-    Cleans up an error message by removing specific markers and unnecessary content.
+    Cleans an error message by removing specific markers and returning the first line of the
+    message.
 
-    If the message contains the marker "(content_filter)", this function will:
-    - Extract the first line of the message.
-    - Remove the "(content_filter)" marker.
-    - Strip any leading or trailing whitespace.
-
-    If the message contains the marker "(RateLimitReached)", this function will:
-    - Extract the first line of the message.
-    - Remove the "(RateLimitReached)" marker.
-    - Strip any leading or trailing whitespace.
-
-    If neither marker is present, the original message is returned unchanged.
+    This function checks for the presence of predefined markers in the input message, such as
+    "(content_filter)", "(RateLimitReached)", and "(tokens_limit_reached)". If any of these markers
+    are found, it removes the marker, trims the resulting string, and returns the first line of the
+    message. If no markers are found, the original message is returned unchanged.
 
     Args:
         msg (str): The error message to be cleaned.
@@ -68,12 +84,9 @@ def clean_error_message(msg: str) -> str:
     Returns:
         str: The cleaned error message.
     """
-    if "(content_filter)" in msg:
-        return msg.split("\n")[0].replace("(content_filter)", "").strip()
-    if "(RateLimitReached)" in msg:
-        return msg.split("\n")[0].replace("(RateLimitReached)", "").strip()
-    if "(tokens_limit_reached)" in msg:
-        return msg.split("\n")[0].replace("(tokens_limit_reached)", "").strip()
+    for marker in ["(content_filter)", "(RateLimitReached)", "(tokens_limit_reached)"]:
+        if marker in msg:
+            return msg.split("\n")[0].replace(marker, "").strip()
     return msg
 
 
@@ -95,12 +108,7 @@ async def process_media_message(message: Message, target_message: Message) -> No
     query_text = target_message.caption
     clean_text, model = parse_and_get_model(query_text) if query_text else ("", DEFAULT_MODEL)
 
-    file_obj = None
-    if target_message.photo:
-        file_obj = await target_message.bot.get_file(target_message.photo[-1].file_id)  # type: ignore
-    elif target_message.sticker:
-        file_obj = await target_message.bot.get_file(target_message.sticker.file_id)  # type: ignore
-
+    file_obj = await _get_media_file(target_message)
     if not file_obj:
         await message.answer("No media file found.")
         return
@@ -126,7 +134,9 @@ async def process_media_message(message: Message, target_message: Message) -> No
     if response:
         clean_response = RE_THINK.sub("", response).strip()
         full_response = f"[✨ {used_model.value}] {clean_response}"
-        await message.answer(telegram_format(full_response))
+        chunks = split_text_with_formatting(telegram_format(full_response))
+        for chunk in chunks:
+            await message.answer(chunk)
         await save_message(message.from_user.id, clean_text, clean_response)  # type: ignore
         return
 
@@ -173,14 +183,20 @@ async def process_and_reply(message: Message, *, clear: bool = False) -> None:
     updated_message = message.model_copy(update={"text": clean_text})
     response = await process_message(updated_message, model)
     if response:
-        clean_response = RE_THINK.sub("", response).strip()
-        await message.answer(telegram_format(clean_response))
+        clean_response = (
+            RE_THINK.sub("", "".join(response) if isinstance(response, list) else response)
+            .strip()
+            .strip()
+        )
+        chunks = split_text_with_formatting(telegram_format(clean_response))
+        for chunk in chunks:
+            await message.answer(chunk)
         return
 
     await message.answer("No response generated. :/")
 
 
-async def process_message(message: Message, model: AIModel) -> str | None:
+async def process_message(message: Message, model: AIModel) -> list[str] | str | None:
     """
     Process a text message by building the conversation context, querying the
     Azure ChatCompletions API, and saving the exchange.
@@ -218,6 +234,10 @@ async def process_message(message: Message, model: AIModel) -> str | None:
         return str(error)
 
     await save_message(user_id, input_text, reply_text)
+
+    if len(full_response) > 4096:
+        return split_text_with_formatting(full_response)
+
     return full_response
 
 
@@ -232,6 +252,7 @@ async def save_message(user_id: int, user_msg: str, bot_resp: str):
     """
     await Conversation.create(user_id=user_id, user_message=user_msg, bot_response=bot_resp)
     records = await Conversation.filter(user_id=user_id).order_by("-timestamp").all()
+
     if len(records) > 30:
         ids_to_delete = [record.id for record in records[30:]]
         await Conversation.filter(id__in=ids_to_delete).delete()
