@@ -127,9 +127,6 @@ async def process_media_message(message: Message, target_message: Message) -> No
     except HttpResponseError as chat_err:
         await message.answer(clean_error_message(chat_err.message))
         return
-    except Exception as error:
-        await message.answer(str(error))
-        return
 
     if response:
         clean_response = RE_THINK.sub("", response).strip()
@@ -230,8 +227,6 @@ async def process_message(message: Message, model: AIModel) -> list[str] | str |
         full_response = f"[✨ {used_model.value}] {reply_text}"
     except HttpResponseError as chat_err:
         return clean_error_message(chat_err.message)
-    except Exception as error:
-        return str(error)
 
     await save_message(user_id, input_text, reply_text)
 

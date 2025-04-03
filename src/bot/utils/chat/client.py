@@ -7,6 +7,7 @@ from inspect import iscoroutinefunction
 from pathlib import Path
 
 import orjson
+import tiktoken
 from aiogram.types import User
 from azure.ai.inference.aio import ChatCompletionsClient
 from azure.ai.inference.models import (
@@ -206,7 +207,7 @@ async def _process_tool_calls(
     messages: list[ChatRequestMessage],
     selected_message: ChatResponseMessage,
     client: ChatCompletionsClient,
-    model_value: str,
+    model: AIModel,
 ) -> ChatResponseMessage:
     """
     Processes tool calls in the response message and updates the messages list accordingly.
@@ -215,7 +216,7 @@ async def _process_tool_calls(
         messages (list[ChatRequestMessage]): List of chat messages.
         selected_message (ChatResponseMessage): The response message containing tool_calls.
         client (ChatCompletionsClient): Client used to communicate with the Azure service.
-        model_value (str): The model identifier used for the chat request.
+        model (AIModel): The model identifier used for the chat request.
 
     Returns:
         ChatResponseMessage: An updated chat response message after processing tool calls.
@@ -225,9 +226,7 @@ async def _process_tool_calls(
         try:
             function_args = orjson.loads(tool_call.function.arguments)
         except Exception as error:
-            logger.error(
-                "Falha ao decodificar argumentos da ferramenta '%s': %s", function_name, error
-            )
+            logger.error("Failed to decode tool arguments for '%s': %s", function_name, error)
             function_args = {}
         messages.append(
             AssistantMessage(
@@ -245,14 +244,20 @@ async def _process_tool_calls(
         try:
             tool_response = await _execute_tool_call(function_name, function_args)
         except Exception as error:
-            logger.error(
-                "Erro na execução da chamada da ferramenta '%s': %s", function_name, error
-            )
-            tool_response = orjson.dumps({
-                "error": f"Erro na execução de {function_name}"
-            }).decode()
+            logger.error("Error executing tool call '%s': %s", function_name, error)
+            tool_response = orjson.dumps({"error": f"Error executing {function_name}"}).decode()
         messages.append(ToolMessage(content=tool_response, tool_call_id=tool_call.id))
-    return (await client.complete(messages=messages, model=model_value)).choices[0].message
+
+    if model not in {AIModel.DEEPSEEK_V3, AIModel.DEEPSEEK_R1}:
+        last_message = messages[-1]
+        if isinstance(last_message, ToolMessage) and isinstance(last_message.content, str):
+            enc = tiktoken.encoding_for_model(model.value)
+            tokens = enc.encode(last_message.content)
+            if len(tokens) > 4000:
+                truncated = enc.decode(tokens[:4000])
+                last_message.content = truncated
+
+    return (await client.complete(messages=messages, model=model.value)).choices[0].message
 
 
 async def _complete_chat(
@@ -275,6 +280,7 @@ async def _complete_chat(
     Raises:
         HttpResponseError: If an error occurs during the request or the response is invalid.
     """
+
     try:
         response = await client.complete(
             messages=messages,
@@ -297,9 +303,7 @@ async def _complete_chat(
     selected_message: ChatResponseMessage = response.choices[0].message
 
     while hasattr(selected_message, "tool_calls") and selected_message.tool_calls:
-        selected_message = await _process_tool_calls(
-            messages, selected_message, client, model.value
-        )
+        selected_message = await _process_tool_calls(messages, selected_message, client, model)
 
     if not selected_message.content:
         msg = "Azure ChatCompletions API returned an empty or invalid response."
