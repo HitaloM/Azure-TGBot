@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
-from __future__ import annotations
-
 import logging
 import time
 from inspect import iscoroutinefunction
@@ -45,7 +43,7 @@ from .models import AIModel
 from .system_message import get_system_message
 from .tools.schema import TOOL_HANDLERS, TOOLS
 
-logger = logging.getLogger(__name__)  # Logger no nível do módulo
+logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = AIModel.GPT_4O
 
