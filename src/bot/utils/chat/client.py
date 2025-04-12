@@ -366,8 +366,7 @@ async def query_azure_chat_with_image(
     supported_models: set[AIModel] = {
         AIModel.GPT_4O,
         AIModel.GPT_4O_MINI,
-        AIModel.O1,
-        AIModel.O1_MINI,
+        AIModel.O1_PREVIEW,
         AIModel.O3_MINI,
     }
 

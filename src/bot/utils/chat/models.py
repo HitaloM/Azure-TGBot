@@ -11,22 +11,20 @@ class AIModel(StrEnum):
     Attributes:
         GPT_4O (str): Identifier for the GPT-4O model.
         GPT_4O_MINI (str): Identifier for the GPT-4O-Mini model.
-        O1 (str): Identifier for the O1 model.
-        O1_MINI (str): Identifier for the O1-Mini model.
+        O1_PREVIEW (str): Identifier for the O1-Preview model.
         O3_MINI (str): Identifier for the O3-Mini model.
-        DEEPSEEK_V3 (str): Identifier for the DeepSeek-V3 model.
+        DEEPSEEK_V3 (str): Identifier for the DeepSeek-V3-0324 model.
         DEEPSEEK_R1 (str): Identifier for the DeepSeek-R1 model.
     """
 
     # OpenAI models
     GPT_4O = "gpt-4o"
     GPT_4O_MINI = "gpt-4o-mini"
-    O1 = "o1"
-    O1_MINI = "o1-mini"
+    O1_PREVIEW = "o1-preview"
     O3_MINI = "o3-mini"
 
     # DeepSeek models
-    DEEPSEEK_V3 = "DeepSeek-V3"
+    DEEPSEEK_V3 = "DeepSeek-V3-0324"
     DEEPSEEK_R1 = "DeepSeek-R1"
 
     @classmethod
