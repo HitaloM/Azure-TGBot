@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
-from typing import ClassVar
 
 from pydantic import AnyHttpUrl, SecretStr
 from pydantic_settings import BaseSettings
@@ -23,7 +22,7 @@ class Settings(BaseSettings):
     azure_endpoint: AnyHttpUrl = AnyHttpUrl("https://models.inference.ai.azure.com")
     bing_api_key: SecretStr
     token_truncate_limit: int = 4000
-    sudoers: ClassVar[list[int]] = [918317361]
+    sudoers: list[int] = [918317361]
 
     @property
     def bot_id(self) -> str:
