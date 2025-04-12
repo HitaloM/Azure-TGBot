@@ -1,22 +1,35 @@
 [project]
 name = "bot"
 version = "1.0.0"
-description = "Telegram bot chatbot using AIOgram and Azure API."
+description = "A conversational Telegram chatbot using Azure AI models."
 authors = [{ name = "Hitalo" }]
 dependencies = [
     "aiogram[I18n,fast]>=3.19.0",
     "aiohttp[speedups]>=3.11.14",
     "azure-ai-inference>=1.0.0b9",
+    "tiktoken>=0.9.0",
     "pydantic-settings>=2.8.1",
     "tortoise-orm>=0.24.2",
-    "chatgpt-md-converter>=0.2.0",
     "orjson>=3.10.16",
+    "chatgpt-md-converter>=0.2.0",
     "lxml>=5.3.1",
-    "tiktoken>=0.9.0",
 ]
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.13"
+keywords = ["telegram", "bot", "chatbot", "azure", "ai", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: BSD License",
+    "Topic :: Communications :: Chat",
+    "Intended Audience :: End Users/Desktop",
+]
+
+[project.urls]
+Documentation = "https://github.com/HitaloM/Azure-TGBot"
+Issues = "https://github.com/HitaloM/Azure-TGBot/issues"
+Source = "https://github.com/HitaloM/Azure-TGBot"
 
 [build-system]
 requires = ["hatchling"]
