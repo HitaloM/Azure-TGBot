@@ -60,12 +60,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    """
-    Entry point for running the bot script.
-
-    This block sets up the asyncio event loop using uvloop for better performance
-    and runs the main function. It also handles graceful shutdown on a keyboard interrupt.
-    """
     try:
         with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
             runner.run(main())

@@ -3,7 +3,6 @@
 
 import logging
 import time
-from inspect import iscoroutinefunction
 from pathlib import Path
 
 import orjson
@@ -41,7 +40,7 @@ from bot import config
 
 from .models import AIModel
 from .system_message import get_system_message
-from .tools.schema import TOOL_HANDLERS, TOOLS
+from .tools.tool_manager import tool_manager
 
 logger = logging.getLogger(__name__)
 
@@ -201,12 +200,16 @@ async def _execute_tool_call(function_name: str, arguments: dict) -> str:
     Returns:
         str: The JSON-encoded result of the function execution.
     """
-    handler = TOOL_HANDLERS.get(function_name)
+    handler = tool_manager.get_tool_handlers().get(function_name)
     if not handler:
         return orjson.dumps({"error": f"Unknown function {function_name}"}).decode()
 
-    result = await handler(**arguments) if iscoroutinefunction(handler) else handler(**arguments)
-    return orjson.dumps(result).decode()
+    try:
+        result = await handler(**arguments)
+        return orjson.dumps(result).decode()
+    except Exception as error:
+        logger.error("Error executing tool call '%s': %s", function_name, error)
+        return orjson.dumps({"error": f"Error executing {function_name}: {error!s}"}).decode()
 
 
 async def _process_tool_calls(
@@ -295,6 +298,8 @@ async def _complete_chat(
         HttpResponseError: If an error occurs during the request or the response is invalid.
     """
 
+    tools = tool_manager.get_tool_definitions()
+
     try:
         response = await client.complete(
             messages=messages,
@@ -302,7 +307,7 @@ async def _complete_chat(
             top_p=0.9,
             max_tokens=1000,
             model=model.value,
-            tools=TOOLS,
+            tools=tools,
             tool_choice=ChatCompletionsToolChoicePreset.AUTO,
         )
     except HttpResponseError as e:

@@ -11,12 +11,12 @@ from azure.core.exceptions import HttpResponseError
 from chatgpt_md_converter import telegram_format
 
 from bot.database.models import Conversation
+from bot.utils.text_splitter import split_text_with_formatting
 
 from .client import DEFAULT_MODEL, query_azure_chat, query_azure_chat_with_image
 from .context import build_reply_context
 from .history import clear_conversation_history, get_conversation_history
 from .models import AIModel
-from .text_utils import split_text_with_formatting
 
 RE_MODEL = re.compile(r"use:\s*(\S+)", flags=re.IGNORECASE)
 RE_CLEAN = re.compile(r"use:\s*\S+", flags=re.IGNORECASE)
