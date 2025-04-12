@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 import uvloop
-from aiogram import Dispatcher
+from aiogram import Dispatcher, Router
 from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram.utils.chat_action import ChatActionMiddleware
 from tortoise import Tortoise
@@ -17,7 +17,7 @@ from .filters.whitelist import WhiteListFilter
 from .handlers.ask import router as ask_router
 from .handlers.models import router as models_router
 from .handlers.reset import router as reset_router
-from .middlewares.queue import QueueMiddleware
+from .middlewares import setup_middlewares, shutdown_middlewares
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -38,11 +38,20 @@ async def main() -> None:
     """
     await init_db()
 
+    main_router = Router(name="main-router")
     dp = Dispatcher(name="root-dispatcher")
-    dp.message.filter(WhiteListFilter())
-    dp.message.middleware(QueueMiddleware())
-    dp.message.middleware(ChatActionMiddleware())
-    dp.include_routers(reset_router, models_router, ask_router)
+
+    main_router.message.filter(WhiteListFilter())
+
+    setup_middlewares(main_router)
+
+    main_router.message.middleware(ChatActionMiddleware())
+
+    # Register routers in the proper order
+    # Order matters - router are executed in the order they are included
+    main_router.include_routers(reset_router, models_router, ask_router)
+
+    dp.include_router(main_router)
 
     bot_commands = [
         BotCommand(command="/ai", description="Interact with AI"),
@@ -54,9 +63,11 @@ async def main() -> None:
 
     logger.info("Starting the bot...")
 
-    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-
-    await Tortoise.close_connections()
+    try:
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        await shutdown_middlewares()
+        await Tortoise.close_connections()
 
 
 if __name__ == "__main__":
