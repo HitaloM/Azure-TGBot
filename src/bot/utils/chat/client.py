@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
+from __future__ import annotations
+
 import logging
 import time
 from inspect import iscoroutinefunction
@@ -43,7 +45,7 @@ from .models import AIModel
 from .system_message import get_system_message
 from .tools.schema import TOOL_HANDLERS, TOOLS
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # Logger no nível do módulo
 
 DEFAULT_MODEL = AIModel.GPT_4O
 
@@ -123,6 +125,7 @@ class CustomRetryPolicy(RetryPolicy):
                 response = await self.next.send(request)  # type: ignore
 
                 if response.http_response.status_code == 429:
+                    logger.warning("HTTP 429 Too Many Requests encountered.")
                     raise HttpResponseError(
                         message="Too many requests", response=response.http_response
                     )
@@ -136,7 +139,8 @@ class CustomRetryPolicy(RetryPolicy):
 
                 break
 
-            except ClientAuthenticationError:
+            except ClientAuthenticationError as e:
+                logger.error("Client authentication failed: %s", e)
                 raise
 
             except AzureError as err:
@@ -148,6 +152,7 @@ class CustomRetryPolicy(RetryPolicy):
                     await self.sleep(retry_settings, transport)  # type: ignore
                     is_response_error = not isinstance(err, ServiceRequestError)
                     continue
+                logger.error("Azure error encountered: %s", err)
                 raise
 
             finally:
@@ -157,6 +162,7 @@ class CustomRetryPolicy(RetryPolicy):
 
         if response is None:
             msg = "Maximum retries exceeded."
+            logger.error(msg)
             raise AzureError(msg)
 
         self.update_context(response.context, retry_settings)
@@ -176,12 +182,14 @@ def get_azure_client() -> ChatCompletionsClient:
     Raises:
         ValueError: If the configuration values (e.g., endpoint or API key) are invalid.
     """
-    return ChatCompletionsClient(
+    client = ChatCompletionsClient(
         endpoint=str(config.azure_endpoint),
         credential=AzureKeyCredential(config.azure_api_key.get_secret_value()),
         api_version="2025-03-01-preview",
         per_retry_policies=[CustomRetryPolicy()],
     )
+    logger.info("Azure ChatCompletionsClient successfully created.")
+    return client
 
 
 async def _execute_tool_call(function_name: str, arguments: dict) -> str:
@@ -253,11 +261,19 @@ async def _process_tool_calls(
         if isinstance(last_message, ToolMessage) and isinstance(last_message.content, str):
             enc = tiktoken.encoding_for_model(model.value)
             tokens = enc.encode(last_message.content)
-            if len(tokens) > 4000:
-                truncated = enc.decode(tokens[:4000])
+            if len(tokens) > config.token_truncate_limit:
+                truncated = enc.decode(tokens[: config.token_truncate_limit])
                 last_message.content = truncated
 
-    return (await client.complete(messages=messages, model=model.value)).choices[0].message
+    return (
+        (
+            await client.complete(
+                messages=messages, temperature=0.8, top_p=0.9, max_tokens=1000, model=model.value
+            )
+        )
+        .choices[0]
+        .message
+    )
 
 
 async def _complete_chat(
@@ -284,6 +300,9 @@ async def _complete_chat(
     try:
         response = await client.complete(
             messages=messages,
+            temperature=0.8,
+            top_p=0.9,
+            max_tokens=1000,
             model=model.value,
             tools=TOOLS,
             tool_choice=ChatCompletionsToolChoicePreset.AUTO,
