@@ -9,6 +9,3 @@ requirements-dev.lock
 
 # python
 __pycache__/
-
-# vscode
-.vscode/
