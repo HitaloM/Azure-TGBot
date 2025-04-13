@@ -19,22 +19,20 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimitMiddleware(BaseMiddleware):
-    """
-    Middleware to limit request rate per user.
+    """Middleware to control and limit request rates for users and groups.
 
-    This middleware controls how many requests a user can make in a period of time,
-    preventing overload and bot abuse.
+    This middleware prevents abuse and overload by limiting how many requests a user or group
+    can make in a specific time period. Administrators defined in config.sudoers are exempt
+    from rate limiting.
 
     Attributes:
-        user_requests (Dict[int, List[float]]): Dictionary that stores timestamps of requests
-            for each user
-        group_requests (Dict[int, List[float]]): Dictionary that stores timestamps of requests
-            for each group
-        user_limit (int): Maximum number of requests allowed per user in the interval
-        user_interval (int): Time interval (in seconds) to check user requests
-        group_limit (int): Maximum number of requests allowed per group in the interval
-        group_interval (int): Time interval (in seconds) to check group requests
-        cleanup_interval (int): Time interval (in seconds) to clean old records
+        user_requests: Dictionary that stores timestamps of requests for each user.
+        group_requests: Dictionary that stores timestamps of requests for each group.
+        user_limit: Maximum number of requests allowed per user in the interval.
+        user_interval: Time interval (in seconds) to check user requests.
+        group_limit: Maximum number of requests allowed per group in the interval.
+        group_interval: Time interval (in seconds) to check group requests.
+        cleanup_task: Asyncio task that runs periodic cleanup of old records.
     """
 
     def __init__(
@@ -45,15 +43,15 @@ class RateLimitMiddleware(BaseMiddleware):
         group_interval: int = 60,
         cleanup_interval: int = 300,
     ):
-        """
-        Initialize the rate limiting middleware.
+        """Initialize the rate limiting middleware with configurable parameters.
 
         Args:
-            user_limit: Maximum number of requests per user in the interval. Default: 5
-            user_interval: Time interval in seconds for users. Default: 30
-            group_limit: Maximum number of requests per group in the interval. Default: 10
-            group_interval: Time interval in seconds for groups. Default: 60
-            cleanup_interval: Interval to clean old records. Default: 300 (5 minutes)
+            user_limit: Maximum number of requests per user in the interval. Defaults to 5.
+            user_interval: Time interval in seconds for user rate limiting. Defaults to 30.
+            group_limit: Maximum number of requests per group in the interval. Defaults to 10.
+            group_interval: Time interval in seconds for group rate limiting. Defaults to 60.
+            cleanup_interval: Interval in seconds to clean old records.
+                Defaults to 300 (5 minutes).
         """
         # Using defaultdict to automatically create empty lists for new users/groups
         self.user_requests: dict[int, list[float]] = defaultdict(list)
@@ -81,16 +79,19 @@ class RateLimitMiddleware(BaseMiddleware):
         event: Message | CallbackQuery,
         data: dict[str, Any],
     ) -> Any | None:
-        """
-        Process an event and check if it's within rate limits.
+        """Process an event and apply rate limiting.
+
+        This method is called by the aiogram framework for each incoming event.
+        It identifies the user and/or chat, checks if they've exceeded their rate limits,
+        and either allows the event to be processed or rejects it.
 
         Args:
-            handler: The handler function that will process the event
-            event: The Telegram event (Message or CallbackQuery)
-            data: Additional data for the handler
+            handler: The handler function that will process the event.
+            event: The Telegram event (Message or CallbackQuery).
+            data: Additional data for the handler.
 
         Returns:
-            The handler result or None if rate limit is exceeded
+            The handler result if rate limit is not exceeded, None otherwise.
         """
         now = time.time()
 
@@ -151,29 +152,32 @@ class RateLimitMiddleware(BaseMiddleware):
 
     @staticmethod
     def _is_admin(user_id: int) -> bool:
-        """
-        Check if a user is a bot administrator (bypass rate limit).
+        """Check if a user is a bot administrator (bypass rate limit).
+
+        Administrators defined in the config.sudoers list are exempt from rate limits.
 
         Args:
-            user_id: User ID to check
+            user_id: User ID to check.
 
         Returns:
-            True if admin, False otherwise
+            True if the user is an admin (in sudoers list), False otherwise.
         """
         return user_id in config.sudoers
 
     @staticmethod
     def _is_rate_limited(request_times: list[float], limit: int, interval: int) -> bool:
-        """
-        Check if a set of requests exceeds the rate limit.
+        """Check if a set of requests exceeds the rate limit.
+
+        This method updates the request_times list in-place, removing outdated entries
+        and keeping only those within the specified time interval.
 
         Args:
-            request_times: List of request timestamps
-            limit: Maximum number of allowed requests
-            interval: Time interval in seconds
+            request_times: List of request timestamps.
+            limit: Maximum number of allowed requests.
+            interval: Time interval in seconds.
 
         Returns:
-            True if limit is exceeded, False otherwise
+            True if the limit is exceeded, False otherwise.
         """
         if not request_times:
             return False
@@ -191,11 +195,13 @@ class RateLimitMiddleware(BaseMiddleware):
         return len(recent_requests) >= limit
 
     async def _periodic_cleanup(self, interval: int) -> None:
-        """
-        Periodically clean old request records.
+        """Periodically clean old request records to prevent memory growth.
+
+        This internal coroutine runs at regular intervals, removing outdated
+        request records that are no longer needed for rate limiting calculations.
 
         Args:
-            interval: Interval between cleanups in seconds
+            interval: Interval between cleanups in seconds.
         """
         while True:
             try:
@@ -207,8 +213,10 @@ class RateLimitMiddleware(BaseMiddleware):
                 logger.exception("Error during cleanup of old records: %s", e)
 
     async def _cleanup_old_requests(self) -> None:
-        """
-        Remove old request records.
+        """Remove old request records that are no longer needed for rate limiting.
+
+        This method checks all user and group request records and removes those
+        that are outside the relevant time intervals, as well as empty entries.
         """
         now = time.time()
         user_count = 0
@@ -240,10 +248,13 @@ class RateLimitMiddleware(BaseMiddleware):
             )
 
     async def _shutdown(self) -> None:
-        """
-        Properly shut down the middleware when the application is stopping.
+        """Properly shut down the middleware when the application is stopping.
 
-        Note: This is not part of the BaseMiddleware interface, but used by our middleware manager.
+        Cancels the cleanup task and clears all data structures to ensure a clean shutdown.
+
+        Note:
+            This is not part of the BaseMiddleware interface, but is used by the
+            middleware manager during application shutdown.
         """
         logger.info("Shutting down rate limit middleware...")
 

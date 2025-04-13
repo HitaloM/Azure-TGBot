@@ -11,23 +11,33 @@ from bot.database.models import Whitelist
 
 class WhiteListFilter(BaseFilter):
     """
-    A filter to check if a user or chat is whitelisted.
+    Filter to check if a user or chat is whitelisted.
 
-    Methods:
-        __call__(message: Message) -> bool:
-            Determines whether the user or chat is in the whitelist or is a sudoer.
+    This filter verifies if a chat or user is authorized to use the bot based on:
+    1. If the user is in the sudo list (admins always have access)
+    2. If the chat ID exists in the whitelist database table
+
+    For group chats, the chat ID is checked against the whitelist.
+    For private chats, the user ID is checked against the whitelist.
     """
 
     @staticmethod
     async def __call__(message: Message) -> bool:
         """
-        Checks if the user or chat is whitelisted or if the user is a sudoer.
+        Check if the user or chat is authorized to use the bot.
+
+        This method verifies if:
+        - The user is a sudoer (admin)
+        - The chat ID is in the whitelist database
+
+        For group chats, it checks the chat ID against the whitelist.
+        For private chats, it checks the user ID against the whitelist.
 
         Args:
-            message (Message): The incoming message to be filtered.
+            message (Message): The incoming Telegram message to be filtered.
 
         Returns:
-            bool: True if the user or chat is whitelisted or the user is a sudoer, False otherwise.
+            bool: True if the user/chat is authorized to use the bot, False otherwise.
         """
         if not message.from_user:
             return False
@@ -40,6 +50,7 @@ class WhiteListFilter(BaseFilter):
             if message.chat.type in {ChatType.GROUP, ChatType.SUPERGROUP}
             else message.from_user.id
         )
+
         is_whitelisted = await Whitelist.get_or_none(chat_id=chat_id)
 
         return bool(is_whitelisted)

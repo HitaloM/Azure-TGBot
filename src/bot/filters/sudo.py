@@ -9,23 +9,27 @@ from bot import config
 
 class SudoFilter(BaseFilter):
     """
-    A filter to check if a user is a sudoer.
+    Filter to check if a user has sudo privileges.
 
-    Methods:
-        __call__(message: Message) -> bool:
-            Determines whether the user who sent the message is in the sudoers list.
+    This filter checks whether the user who sent the message is in the sudoers list
+    defined in the application configuration. Users in this list are granted
+    administrative privileges.
     """
 
     @staticmethod
     async def __call__(message: Message) -> bool:
         """
-        Checks if the user who sent the message is in the sudoers list.
+        Check if the message sender has sudo privileges.
+
+        This method verifies if the user who sent the message is present in the
+        application's sudoers list. If there's no user associated with the message,
+        it returns False.
 
         Args:
-            message (Message): The incoming message to be filtered.
+            message (Message): The incoming Telegram message to be filtered.
 
         Returns:
-            bool: True if the user is a sudoer, False otherwise.
+            bool: True if the user is in the sudoers list, False otherwise.
         """
         if not message.from_user:
             return False

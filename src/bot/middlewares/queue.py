@@ -15,22 +15,21 @@ logger = logging.getLogger(__name__)
 
 
 class QueueMiddleware(BaseMiddleware):
-    """
-    Middleware to handle message processing in a queue per user per chat.
+    """Middleware to handle message processing in a queue per user per chat.
 
     This middleware ensures that messages from the same user in the same chat are processed
-    sequentially by maintaining a queue for each user in each chat.
+    sequentially by maintaining a queue for each user in each chat. This approach prevents
+    race conditions and ensures that responses are provided in the same order as requests.
 
     Attributes:
-        user_queues (dict[str, asyncio.Queue]): A dictionary mapping user-chat IDs to their
-            respective queues.
-        tasks (dict[str, asyncio.Task]): A dictionary mapping user-chat IDs to their respective
-            queue processor tasks.
-        max_queue_size (int): Maximum number of messages in the queue before rejecting new ones.
-        process_timeout (float): Maximum time in seconds to process a message before timing out.
-        cleanup_interval (int): Time in seconds between queue cleanup checks.
-        idle_timeout (int): Time in seconds after which an idle queue is removed.
-        last_activity (dict[str, float]): Tracks the last activity time for each user-chat.
+        user_queues: A dictionary mapping user-chat IDs to their respective queues.
+        tasks: A dictionary mapping user-chat IDs to their respective queue processor tasks.
+        max_queue_size: Maximum number of messages in the queue before rejecting new ones.
+        process_timeout: Maximum time in seconds to process a message before timing out.
+        cleanup_interval: Time in seconds between queue cleanup checks.
+        idle_timeout: Time in seconds after which an idle queue is removed.
+        last_activity: Tracks the last activity time for each user-chat.
+        cleanup_task: Asyncio task that runs periodic cleanup of idle queues.
     """
 
     def __init__(
@@ -40,15 +39,14 @@ class QueueMiddleware(BaseMiddleware):
         cleanup_interval: int = 300,
         idle_timeout: int = 3600,
     ):
-        """
-        Initialize the queue middleware with configurable parameters.
+        """Initialize the queue middleware with configurable parameters.
 
         Args:
-            max_queue_size (int): Maximum size of each user's queue. Defaults to 50.
-            process_timeout (float): Maximum time in seconds to process a message. Defaults to 60.
-            cleanup_interval (int): Time between cleanup checks in seconds. Defaults to 300
+            max_queue_size: Maximum size of each user's queue. Defaults to 50.
+            process_timeout: Maximum time in seconds to process a message. Defaults to 60.
+            cleanup_interval: Time between cleanup checks in seconds. Defaults to 300
                 (5 minutes).
-            idle_timeout (int): Time after which an idle queue is removed in seconds. Defaults to
+            idle_timeout: Time after which an idle queue is removed in seconds. Defaults to
                 3600 (1 hour).
         """
         self.user_queues: dict[str, asyncio.Queue] = {}
@@ -73,8 +71,10 @@ class QueueMiddleware(BaseMiddleware):
         event: Message,
         data: dict[str, Any],
     ) -> Any:
-        """
+        """Process an incoming event through the queue system.
+
         Enqueues a message for processing and ensures a queue exists for the user in the chat.
+        This method is called by the aiogram framework for each incoming event.
 
         Args:
             handler: The handler function to process the message.
@@ -82,7 +82,7 @@ class QueueMiddleware(BaseMiddleware):
             data: Additional data for the handler.
 
         Returns:
-            Any: The result of the handler if immediate processing is enabled.
+            Any: The result of the handler if immediate processing is enabled, otherwise None.
         """
         # Only process Message objects
         if not isinstance(event, Message):
@@ -126,11 +126,13 @@ class QueueMiddleware(BaseMiddleware):
         return None
 
     def _ensure_queue(self, queue_id: str) -> None:
-        """
-        Ensures that a queue and a processing task exist for the given queue ID.
+        """Ensures that a queue and a processing task exist for the given queue ID.
+
+        Creates a new queue and associated processing task if one does not already exist
+        for the specified queue_id.
 
         Args:
-            queue_id: The ID of the queue (user_id:chat_id).
+            queue_id: The ID of the queue in format "user_id:chat_id".
         """
         if queue_id not in self.user_queues:
             self.user_queues[queue_id] = asyncio.Queue()
@@ -139,11 +141,13 @@ class QueueMiddleware(BaseMiddleware):
             logger.debug("Created new queue and task for queue_id: %s", queue_id)
 
     async def queue_processor(self, queue_id: str) -> None:
-        """
-        Processes messages in the queue for a specific user in a specific chat.
+        """Processes messages in the queue for a specific user in a specific chat.
+
+        This coroutine runs continuously, taking items from the queue and processing them
+        one at a time. It handles timeouts and errors during processing.
 
         Args:
-            queue_id: The ID of the queue (user_id:chat_id).
+            queue_id: The ID of the queue in format "user_id:chat_id".
         """
         queue = self.user_queues[queue_id]
         while True:
@@ -179,8 +183,11 @@ class QueueMiddleware(BaseMiddleware):
                 await asyncio.sleep(1)
 
     async def _periodic_cleanup(self) -> None:
-        """
-        Periodically checks for and removes idle queues to free up resources.
+        """Periodically checks for and removes idle queues to free up resources.
+
+        This is an internal coroutine that runs at regular intervals defined by
+        cleanup_interval, checking for and removing queues that have been idle
+        for longer than idle_timeout.
         """
         while True:
             try:
@@ -192,8 +199,10 @@ class QueueMiddleware(BaseMiddleware):
                 logger.exception("Error during queue cleanup: %s", e)
 
     async def _cleanup_idle_queues(self) -> None:
-        """
-        Removes queues that have been idle for longer than the idle_timeout.
+        """Removes queues that have been idle for longer than the specified timeout.
+
+        Checks all queues and removes those that haven't had activity within the
+        idle_timeout period.
         """
         current_time = time.time()
         queue_ids_to_remove = []
@@ -209,11 +218,10 @@ class QueueMiddleware(BaseMiddleware):
             logger.info("Cleaned up %d idle queues", len(queue_ids_to_remove))
 
     async def _remove_queue(self, queue_id: str) -> None:
-        """
-        Safely removes a queue and cancels its processor task.
+        """Removes a specific queue and its associated task.
 
         Args:
-            queue_id: The ID of the queue to remove (user_id:chat_id).
+            queue_id: The ID of the queue to remove in format "user_id:chat_id".
         """
         if queue_id in self.tasks:
             task = self.tasks[queue_id]
@@ -231,11 +239,14 @@ class QueueMiddleware(BaseMiddleware):
         logger.debug("Removed queue and task for queue_id: %s", queue_id)
 
     async def _shutdown(self) -> None:
-        """
-        Properly shuts down all queues and tasks when the application is stopping.
-        Should be called during application shutdown.
+        """Properly shuts down all queues and tasks when the application is stopping.
 
-        Note: This is not part of the BaseMiddleware interface, but used by our middleware manager.
+        Cancels all tasks and clears all queue-related data structures to ensure
+        a clean shutdown.
+
+        Note:
+            This is not part of the BaseMiddleware interface, but is used by the
+            middleware manager during application shutdown.
         """
         logger.info("Shutting down queue middleware...")
 

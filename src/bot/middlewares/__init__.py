@@ -15,8 +15,7 @@ _middleware_instances = []
 
 
 def setup_middlewares(router: Router) -> None:
-    """
-    Configures and registers middlewares for the provided router.
+    """Configures and registers middlewares for the provided router.
 
     This function sets up two middlewares:
     1. QueueMiddleware: Manages a queue for processing messages with specific
@@ -30,11 +29,7 @@ def setup_middlewares(router: Router) -> None:
     stored for later shutdown.
 
     Args:
-        router (Router): The router instance to which the middlewares will be
-        attached.
-
-    Raises:
-        None
+        router: The router instance to which the middlewares will be attached.
     """
     queue_middleware = QueueMiddleware(
         max_queue_size=50,  # Maximum of 50 messages in the queue
@@ -66,8 +61,7 @@ def setup_middlewares(router: Router) -> None:
 
 
 async def shutdown_middlewares():
-    """
-    Asynchronously shuts down all middleware instances.
+    """Asynchronously shuts down all middleware instances.
 
     This function iterates through all middleware instances stored in the
     `_middleware_instances` list and attempts to call their `_shutdown` method
