@@ -10,7 +10,6 @@ from src.bot.middlewares.rate_limit import RateLimitMiddleware
 
 logger = logging.getLogger(__name__)
 
-# Keep track of middleware instances to allow cleanup on shutdown
 _middleware_instances = []
 
 
@@ -55,7 +54,6 @@ def setup_middlewares(router: Router) -> None:
     router.message.outer_middleware(queue_middleware)
     logger.debug("Queue middleware registered")
 
-    # Store middleware instances for later shutdown
     _middleware_instances.extend([rate_limit_middleware, queue_middleware])
     logger.info("All middlewares registered successfully")
 

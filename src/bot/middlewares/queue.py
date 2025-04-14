@@ -57,7 +57,6 @@ class QueueMiddleware(BaseMiddleware):
         self.idle_timeout = idle_timeout
         self.last_activity: dict[str, float] = {}
 
-        # Start the cleanup task
         self.cleanup_task = asyncio.create_task(self._periodic_cleanup())
         logger.debug(
             "Queue middleware initialized with max_queue_size=%d, process_timeout=%.1f",
@@ -84,11 +83,9 @@ class QueueMiddleware(BaseMiddleware):
         Returns:
             Any: The result of the handler if immediate processing is enabled, otherwise None.
         """
-        # Only process Message objects
         if not isinstance(event, Message):
             return await handler(event, data)
 
-        # Skip if no user - should never happen but just in case
         if not event.from_user:
             return await handler(event, data)
 
@@ -96,22 +93,18 @@ class QueueMiddleware(BaseMiddleware):
         user_id = str(event.from_user.id)
         queue_id = f"{user_id}:{chat_id}"
 
-        # Update last activity time
         self.last_activity[queue_id] = time.time()
 
-        # Create a new queue if it doesn't exist
         self._ensure_queue(queue_id)
 
         queue = self.user_queues[queue_id]
 
-        # Check if queue is full
         if queue.qsize() >= self.max_queue_size:
             logger.warning(
                 "Queue for user %s in chat %s is full. Message rejected.", user_id, chat_id
             )
             return None
 
-        # Put the message in the queue with its timestamp
         item = (time.time(), (handler, event, data))
         try:
             await asyncio.wait_for(queue.put(item), timeout=5.0)
@@ -122,7 +115,6 @@ class QueueMiddleware(BaseMiddleware):
             )
             return None
 
-        # Return None as the actual processing will happen in the queue
         return None
 
     def _ensure_queue(self, queue_id: str) -> None:
@@ -152,13 +144,10 @@ class QueueMiddleware(BaseMiddleware):
         queue = self.user_queues[queue_id]
         while True:
             try:
-                # Get the next message from the queue
                 _timestamp, (handler, event, data) = await queue.get()
 
-                # Update activity timestamp
                 self.last_activity[queue_id] = time.time()
 
-                # Process the message with timeout
                 try:
                     logger.debug("Processing message for queue_id: %s", queue_id)
                     await asyncio.wait_for(handler(event, data), timeout=self.process_timeout)
@@ -179,7 +168,6 @@ class QueueMiddleware(BaseMiddleware):
                 logger.exception(
                     "Unexpected error in queue processor for queue_id: %s: %s", queue_id, e
                 )
-                # Sleep a bit to avoid tight loop in case of persistent errors
                 await asyncio.sleep(1)
 
     async def _periodic_cleanup(self) -> None:
@@ -250,13 +238,11 @@ class QueueMiddleware(BaseMiddleware):
         """
         logger.info("Shutting down queue middleware...")
 
-        # Cancel the cleanup task
         if hasattr(self, "cleanup_task"):
             self.cleanup_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self.cleanup_task
 
-        # Cancel all queue processor tasks
         for _queue_id, task in list(self.tasks.items()):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

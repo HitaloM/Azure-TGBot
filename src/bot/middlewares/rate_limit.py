@@ -53,7 +53,6 @@ class RateLimitMiddleware(BaseMiddleware):
             cleanup_interval: Interval in seconds to clean old records.
                 Defaults to 300 (5 minutes).
         """
-        # Using defaultdict to automatically create empty lists for new users/groups
         self.user_requests: dict[int, list[float]] = defaultdict(list)
         self.group_requests: dict[int, list[float]] = defaultdict(list)
 
@@ -62,7 +61,6 @@ class RateLimitMiddleware(BaseMiddleware):
         self.group_limit = group_limit
         self.group_interval = group_interval
 
-        # Start periodic cleanup task
         self.cleanup_task = asyncio.create_task(self._periodic_cleanup(cleanup_interval))
         logger.debug(
             "Rate limit middleware initialized: user_limit=%d, "
@@ -95,12 +93,10 @@ class RateLimitMiddleware(BaseMiddleware):
         """
         now = time.time()
 
-        # Identify user
         user_id = None
         if hasattr(event, "from_user") and event.from_user:
             user_id = event.from_user.id
 
-        # Identify chat (group or private)
         chat_id = None
         is_group = False
 
@@ -111,18 +107,15 @@ class RateLimitMiddleware(BaseMiddleware):
             chat_id = event.message.chat.id
             is_group = event.message.chat.type in {ChatType.GROUP, ChatType.SUPERGROUP}
 
-        # If we can't identify either user or chat, allow the request
         if user_id is None and chat_id is None:
             logger.warning("Could not identify user or chat in request")
             return await handler(event, data)
 
-        # Check limits for user
         if user_id is not None and not self._is_admin(user_id):
             if self._is_rate_limited(
                 self.user_requests[user_id], self.user_limit, self.user_interval
             ):
                 logger.warning("User %d exceeded the request limit", user_id)
-                # Here you can send a message to the user informing about the rate limit
                 if isinstance(event, Message) and event.chat.type == "private":
                     try:
                         await event.answer(
@@ -133,10 +126,8 @@ class RateLimitMiddleware(BaseMiddleware):
                         logger.error("Error sending rate limit warning: %s", e)
                 return None
 
-            # Register the user's request
             self.user_requests[user_id].append(now)
 
-        # Check limits for group
         if is_group and chat_id is not None:
             if self._is_rate_limited(
                 self.group_requests[chat_id], self.group_limit, self.group_interval
@@ -144,10 +135,8 @@ class RateLimitMiddleware(BaseMiddleware):
                 logger.warning("Group %d exceeded the request limit", chat_id)
                 return None
 
-            # Register the group's request
             self.group_requests[chat_id].append(now)
 
-        # If passing checks, process normally
         return await handler(event, data)
 
     @staticmethod
@@ -184,14 +173,11 @@ class RateLimitMiddleware(BaseMiddleware):
 
         now = time.time()
 
-        # Filter requests within the interval
         recent_requests = [t for t in request_times if now - t <= interval]
 
-        # Update the list to keep only recent requests
         request_times.clear()
         request_times.extend(recent_requests)
 
-        # Check if exceeds the limit
         return len(recent_requests) >= limit
 
     async def _periodic_cleanup(self, interval: int) -> None:
@@ -222,9 +208,7 @@ class RateLimitMiddleware(BaseMiddleware):
         user_count = 0
         group_count = 0
 
-        # Clean user records
         for user_id, timestamps in list(self.user_requests.items()):
-            # Keep only requests within the interval
             recent = [t for t in timestamps if now - t <= self.user_interval]
             if recent:
                 self.user_requests[user_id] = recent
@@ -232,9 +216,7 @@ class RateLimitMiddleware(BaseMiddleware):
                 del self.user_requests[user_id]
                 user_count += 1
 
-        # Clean group records
         for group_id, timestamps in list(self.group_requests.items()):
-            # Keep only requests within the interval
             recent = [t for t in timestamps if now - t <= self.group_interval]
             if recent:
                 self.group_requests[group_id] = recent
