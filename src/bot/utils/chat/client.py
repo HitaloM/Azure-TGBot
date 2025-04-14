@@ -57,12 +57,6 @@ IMAGE_SUPPORTED_MODELS: set[AIModel] = {
     AIModel.O3_MINI,
 }
 
-CHAT_PARAMS = {
-    "temperature": 0.8,
-    "top_p": 0.9,
-    "max_tokens": 1000,
-}
-
 
 class CustomRetryPolicy(RetryPolicy):
     """
@@ -146,21 +140,15 @@ class CustomRetryPolicy(RetryPolicy):
         return response
 
 
-def get_azure_client() -> ChatCompletionsClient:
-    """
-    Create a configured Azure ChatCompletions client.
-
-    Returns:
-        Configured ChatCompletionsClient with custom retry policy
-    """
-    client = ChatCompletionsClient(
-        endpoint=str(config.azure_endpoint),
-        credential=AzureKeyCredential(config.azure_api_key.get_secret_value()),
-        api_version="2025-03-01-preview",
-        per_retry_policies=[CustomRetryPolicy()],
-    )
-    logger.info("Azure ChatCompletionsClient successfully created.")
-    return client
+azure_client = ChatCompletionsClient(
+    endpoint=str(config.azure_endpoint),
+    credential=AzureKeyCredential(config.azure_api_key.get_secret_value()),
+    api_version="2025-03-01-preview",
+    per_retry_policies=[CustomRetryPolicy()],
+    temperature=0.8,
+    top_p=0.9,
+    max_tokens=1000,
+)
 
 
 async def _execute_tool_call(function_name: str, arguments: dict[str, Any]) -> str:
@@ -239,11 +227,7 @@ async def _process_tool_calls(
         if len(tokens) > config.token_truncate_limit:
             last_message.content = enc.decode(tokens[: config.token_truncate_limit])
 
-    return (
-        (await client.complete(messages=messages, model=model.value, **CHAT_PARAMS))
-        .choices[0]
-        .message
-    )
+    return (await client.complete(messages=messages, model=model.value)).choices[0].message
 
 
 async def _complete_chat(
@@ -272,7 +256,6 @@ async def _complete_chat(
             model=model.value,
             tools=tools,
             tool_choice=ChatCompletionsToolChoicePreset.AUTO,
-            **CHAT_PARAMS,
         )
     except HttpResponseError as e:
         logger.error(
@@ -317,18 +300,17 @@ async def query_azure_chat(
     messages_with_system = [system_message, *messages]
 
     try:
-        async with get_azure_client() as client:
-            reply = await _complete_chat(messages_with_system, model, client)
-            return reply, model
+        # Usando o cliente global
+        reply = await _complete_chat(messages_with_system, model, azure_client)
+        return reply, model
     except HttpResponseError as error:
         if error.status_code == 429 and model == AIModel.GPT_4O:
             fallback_model = AIModel.GPT_4O_MINI
             logger.warning(
                 "Rate limited on %s, falling back to %s", model.value, fallback_model.value
             )
-            async with get_azure_client() as client:
-                reply = await _complete_chat(messages_with_system, fallback_model, client)
-                return reply, fallback_model
+            reply = await _complete_chat(messages_with_system, fallback_model, azure_client)
+            return reply, fallback_model
         raise
 
 
@@ -368,16 +350,15 @@ async def query_azure_chat_with_image(
     messages = [system_message, user_message]
 
     try:
-        async with get_azure_client() as client:
-            reply = await _complete_chat(messages, model, client)
-            return reply, model
+        # Usando o cliente global
+        reply = await _complete_chat(messages, model, azure_client)
+        return reply, model
     except HttpResponseError as error:
         if error.status_code == 429 and model == AIModel.GPT_4O:
             fallback_model = AIModel.GPT_4O_MINI
             logger.warning(
                 "Rate limited on %s, falling back to %s", model.value, fallback_model.value
             )
-            async with get_azure_client() as client:
-                reply = await _complete_chat(messages, fallback_model, client)
-                return reply, fallback_model
+            reply = await _complete_chat(messages, fallback_model, azure_client)
+            return reply, fallback_model
         raise
