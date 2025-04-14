@@ -201,7 +201,8 @@ def extract_message_entities(message: Message) -> str | None:
     """
     Extract and describe entities from a message.
 
-    Identifies URLs, mentions, hashtags, code snippets and blocks in the message.
+    Identifies various entity types such as URLs, mentions, hashtags, bot commands,
+    and more in the message.
 
     Args:
         message: Message to extract entities from
@@ -213,11 +214,17 @@ def extract_message_entities(message: Message) -> str | None:
         return None
 
     entity_descriptions = {
-        "url": "URL",
-        "mention": "User mention",
-        "hashtag": "Hashtag",
+        "mention": "User mention (@username)",
+        "hashtag": "Hashtag (#hashtag)",
+        "cashtag": "Cashtag ($USD)",
+        "bot_command": "Bot command (/start@bot)",
+        "url": "URL (https://example.com)",
+        "email": "Email (example@example.com)",
+        "phone_number": "Phone number (+123456789)",
         "code": "Code snippet",
         "pre": "Code block",
+        "text_link": "Clickable text URL",
+        "text_mention": "Text mention (user without username)",
     }
 
     entity_types = [
