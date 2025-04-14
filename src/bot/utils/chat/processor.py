@@ -3,6 +3,7 @@
 
 import re
 import tempfile
+from difflib import get_close_matches
 from pathlib import Path
 
 from aiogram.types import File, Message
@@ -27,6 +28,22 @@ RE_INSTRUCTION = re.compile(r"^_instruction:.*?$", flags=re.MULTILINE)
 RE_SESSION = re.compile(r"^_session:.*?$", flags=re.MULTILINE)
 
 MODEL_MAPPING = {model.value.lower(): model for model in AIModel}
+MODEL_ALIAS_MAPPING = {
+    # OpenAI aliases
+    "4o": AIModel.GPT_4O,
+    "gpt4o": AIModel.GPT_4O,
+    "4omini": AIModel.GPT_4O_MINI,
+    "mini": AIModel.GPT_4O_MINI,
+    "o1": AIModel.O1_PREVIEW,
+    "o3": AIModel.O3_MINI,
+    # DeepSeek aliases
+    "deepseek": AIModel.DEEPSEEK_V3,  # Default to V3 when just "deepseek" is specified
+    "deepseek-v3": AIModel.DEEPSEEK_V3,
+    "deepseekv3": AIModel.DEEPSEEK_V3,
+    "v3": AIModel.DEEPSEEK_V3,
+    "deepseekr1": AIModel.DEEPSEEK_R1,
+    "r1": AIModel.DEEPSEEK_R1,
+}
 
 ERROR_MARKERS = ["(content_filter)", "(RateLimitReached)", "(tokens_limit_reached)"]
 
@@ -77,6 +94,37 @@ def is_media_message(message: Message) -> bool:
     )
 
 
+def find_best_model_match(model_name: str) -> AIModel:
+    """
+    Find the best matching model from a partial or alias name.
+
+    Args:
+        model_name: Partial or full model name provided by user
+
+    Returns:
+        The matching AIModel or DEFAULT_MODEL if no match found
+    """
+    model_name = model_name.lower().strip()
+
+    if model_name in MODEL_MAPPING:
+        return MODEL_MAPPING[model_name]
+
+    if model_name in MODEL_ALIAS_MAPPING:
+        return MODEL_ALIAS_MAPPING[model_name]
+
+    all_model_names = list(MODEL_MAPPING.keys())
+    close_matches = get_close_matches(model_name, all_model_names, n=1, cutoff=0.6)
+    if close_matches:
+        return MODEL_MAPPING[close_matches[0]]
+
+    all_aliases = list(MODEL_ALIAS_MAPPING.keys())
+    close_matches = get_close_matches(model_name, all_aliases, n=1, cutoff=0.6)
+    if close_matches:
+        return MODEL_ALIAS_MAPPING[close_matches[0]]
+
+    return DEFAULT_MODEL
+
+
 def parse_and_get_model(text: str | None) -> tuple[str, AIModel]:
     """
     Parse text for model specification and return cleaned text with model.
@@ -91,11 +139,12 @@ def parse_and_get_model(text: str | None) -> tuple[str, AIModel]:
         return "", DEFAULT_MODEL
 
     model_match = RE_MODEL.search(text)
-    model = (
-        MODEL_MAPPING.get(model_match.group(1).lower(), DEFAULT_MODEL)
-        if model_match
-        else DEFAULT_MODEL
-    )
+    if model_match:
+        model_name = model_match.group(1)
+        model = find_best_model_match(model_name)
+    else:
+        model = DEFAULT_MODEL
+
     clean_text = RE_CLEAN.sub("", text).strip()
     return clean_text, model
 
