@@ -5,41 +5,41 @@ from azure.ai.inference.models import AssistantMessage, UserMessage
 
 from bot.database.models import Conversation
 
+type ChatHistory = list[AssistantMessage | UserMessage]
 
-async def get_conversation_history(user_id: int) -> list[AssistantMessage | UserMessage]:
+
+async def get_conversation_history(user_id: int) -> ChatHistory:
     """
-    Retrieve the conversation history for a specific user.
+    Retrieve conversation history for a user.
 
-    This asynchronous function fetches the conversation records associated with the given
-    user, orders them by timestamp, and returns an interleaved list of user and assistant messages.
+    Fetches up to 30 most recent conversation records, orders them chronologically,
+    and converts them to interleaved UserMessage and AssistantMessage objects.
 
     Args:
-        user_id (int): The unique identifier of the user.
+        user_id: Unique identifier for the user
 
     Returns:
-        list[AssistantMessage | UserMessage]: A list of messages in the conversation history.
+        List of alternating UserMessage and AssistantMessage objects
     """
     records = await Conversation.filter(user_id=user_id).order_by("-timestamp").limit(30).all()
     records.reverse()
 
-    return [
-        msg
-        for record in records
-        for msg in (
-            UserMessage(content=record.user_message),
-            AssistantMessage(content=record.bot_response),
-        )
-    ]
+    messages: ChatHistory = []
+    for record in records:
+        messages.append(UserMessage(content=record.user_message))
+        messages.append(AssistantMessage(content=record.bot_response))
+
+    return messages
 
 
 async def clear_conversation_history(user_id: int) -> None:
     """
-    Clears the conversation history for a specific user.
+    Delete all conversation history for a user.
 
-    This function deletes all conversation records associated with the given user ID.
+    This function is typically used when the user wants to start a new conversation
+    without the context from previous interactions.
 
     Args:
-        user_id (int): The unique identifier of the user whose conversation history
-            should be cleared.
+        user_id: Unique identifier for the user
     """
     await Conversation.filter(user_id=user_id).delete()

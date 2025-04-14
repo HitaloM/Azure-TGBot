@@ -4,6 +4,7 @@
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
 import orjson
 import tiktoken
@@ -44,72 +45,51 @@ from .tools.tool_manager import tool_manager
 
 logger = logging.getLogger(__name__)
 
+type ToolResult = dict[str, Any]
+type ModelResponse = tuple[str, AIModel]
+
 DEFAULT_MODEL = AIModel.GPT_4O
+
+IMAGE_SUPPORTED_MODELS: set[AIModel] = {
+    AIModel.GPT_4O,
+    AIModel.GPT_4O_MINI,
+    AIModel.O1_PREVIEW,
+    AIModel.O3_MINI,
+}
+
+CHAT_PARAMS = {
+    "temperature": 0.8,
+    "top_p": 0.9,
+    "max_tokens": 1000,
+}
 
 
 class CustomRetryPolicy(RetryPolicy):
     """
-    CustomRetryPolicy implements a specialized retry mechanism for HTTP requests by extending
-    the base RetryPolicy. It customizes the retry loop by adjusting timeouts, handling HTTP 429
-    ("Too Many Requests") scenarios, and managing specific exceptions such as
-    ClientAuthenticationError and other Azure-related errors.
+    Custom retry policy for handling rate limits and transient errors.
 
-    Methods:
-        send(request: PipelineRequest) -> PipelineResponse:
-            Executes the provided HTTP request within a retry loop.
-            It performs the following tasks:
-
-            - Configures retry settings based on the context options.
-            - Adjusts the timeout settings and tracks retry attempts.
-            - Sends the request using an underlying transport and evaluates the response.
-            - Checks if the response requires a retry (e.g., on encountering HTTP 429) and, if so,
-              increments the retry count and delays the next attempt.
-            - Handles specific exceptions by determining whether a retry is applicable based on
-              the error type.
-            - Updates the request context after a successful attempt or raises an error once the
-              maximum retries are exceeded.
-
-            This method ensures that transient failures and rate-limiting issues are managed
-            gracefully while providing a mechanism for adhering to an absolute timeout
-            constraint across multiple retry attempts.
+    Extends the RetryPolicy to provide specialized handling for HTTP 429 errors
+    (Too Many Requests) and other transient Azure service errors.
     """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
 
     async def send(self, request: PipelineRequest) -> PipelineResponse:
         """
-        Sends a pipeline request and returns the corresponding response,
-        applying retry logic based on the provided options.
+        Send request with retry handling for API rate limits and failures.
 
-        This asynchronous method configures retry settings, adjusts the
-        request timeout, and handles retries in case of errors such as HTTP 429
-        (Too Many Requests) or transient Azure errors. It updates retry history,
-        computes elapsed time for the absolute timeout, and optionally sleeps
-        between retries if necessary. The method ultimately returns a
-        PipelineResponse if successful, or raises an exception if the maximum
-        retries are exceeded or if a non-retryable error occurs.
-
-        Parameters:
-            request (PipelineRequest): The request object containing the HTTP request, context
-                (including options and transport), and other related data.
+        Args:
+            request: Pipeline request to send
 
         Returns:
-            PipelineResponse: The response object received after sending the
-                request.
+            Response from the pipeline
 
         Raises:
-            HttpResponseError: When the HTTP response status code is 429 indicating too many
-                requests.
-            ClientAuthenticationError: If authentication fails.
-            AzureError: For errors encountered during the sending process or if the maximum
-                retry timeout is exceeded.
+            ClientAuthenticationError: When authentication fails
+            AzureError: For other errors after exceeding retries
         """
         retry_settings = self.configure_retries(request.context.options)
         self._configure_positions(request, retry_settings)
         absolute_timeout = retry_settings["timeout"]
         is_response_error = True
-
         response = None
 
         while True:
@@ -168,16 +148,10 @@ class CustomRetryPolicy(RetryPolicy):
 
 def get_azure_client() -> ChatCompletionsClient:
     """
-    Creates and returns an instance of the ChatCompletionsClient configured for Azure OpenAI.
-
-    This function initializes the client with the specified endpoint, API key, API version,
-    and a custom retry policy.
+    Create a configured Azure ChatCompletions client.
 
     Returns:
-        ChatCompletionsClient: An instance of the Azure OpenAI ChatCompletionsClient.
-
-    Raises:
-        ValueError: If the configuration values (e.g., endpoint or API key) are invalid.
+        Configured ChatCompletionsClient with custom retry policy
     """
     client = ChatCompletionsClient(
         endpoint=str(config.azure_endpoint),
@@ -189,16 +163,16 @@ def get_azure_client() -> ChatCompletionsClient:
     return client
 
 
-async def _execute_tool_call(function_name: str, arguments: dict) -> str:
+async def _execute_tool_call(function_name: str, arguments: dict[str, Any]) -> str:
     """
-    Executes a tool call by invoking the appropriate handler based on the function name.
+    Execute a tool call with error handling.
 
     Args:
-        function_name (str): The name of the function to call.
-        arguments (dict): A dictionary of arguments for the function call.
+        function_name: Name of function to call
+        arguments: Arguments to pass to function
 
     Returns:
-        str: The JSON-encoded result of the function execution.
+        JSON-encoded result or error message
     """
     handler = tool_manager.get_tool_handlers().get(function_name)
     if not handler:
@@ -214,29 +188,30 @@ async def _execute_tool_call(function_name: str, arguments: dict) -> str:
 
 async def _process_tool_calls(
     messages: list[ChatRequestMessage],
-    selected_message: ChatResponseMessage,
+    message_with_tools: ChatResponseMessage,
     client: ChatCompletionsClient,
     model: AIModel,
 ) -> ChatResponseMessage:
     """
-    Processes tool calls in the response message and updates the messages list accordingly.
+    Process tool calls from a response message and get AI's follow-up response.
 
     Args:
-        messages (list[ChatRequestMessage]): List of chat messages.
-        selected_message (ChatResponseMessage): The response message containing tool_calls.
-        client (ChatCompletionsClient): Client used to communicate with the Azure service.
-        model (AIModel): The model identifier used for the chat request.
+        messages: Existing conversation messages
+        message_with_tools: Response message containing tool calls
+        client: Azure client for making follow-up requests
+        model: AI model being used
 
     Returns:
-        ChatResponseMessage: An updated chat response message after processing tool calls.
+        Updated chat response after tool execution
     """
-    for tool_call in selected_message.tool_calls or []:
+    for tool_call in message_with_tools.tool_calls or []:
         function_name = tool_call.function.name
         try:
             function_args = orjson.loads(tool_call.function.arguments)
         except Exception as error:
             logger.error("Failed to decode tool arguments for '%s': %s", function_name, error)
             function_args = {}
+
         messages.append(
             AssistantMessage(
                 tool_calls=[
@@ -250,28 +225,22 @@ async def _process_tool_calls(
                 ]
             )
         )
-        try:
-            tool_response = await _execute_tool_call(function_name, function_args)
-        except Exception as error:
-            logger.error("Error executing tool call '%s': %s", function_name, error)
-            tool_response = orjson.dumps({"error": f"Error executing {function_name}"}).decode()
+
+        tool_response = await _execute_tool_call(function_name, function_args)
         messages.append(ToolMessage(content=tool_response, tool_call_id=tool_call.id))
 
-    if model not in {AIModel.DEEPSEEK_V3, AIModel.DEEPSEEK_R1}:
-        last_message = messages[-1]
-        if isinstance(last_message, ToolMessage) and isinstance(last_message.content, str):
-            enc = tiktoken.encoding_for_model(model.value)
-            tokens = enc.encode(last_message.content)
-            if len(tokens) > config.token_truncate_limit:
-                truncated = enc.decode(tokens[: config.token_truncate_limit])
-                last_message.content = truncated
+    if model not in {AIModel.DEEPSEEK_V3, AIModel.DEEPSEEK_R1} and (
+        (last_message := messages[-1])
+        and isinstance(last_message, ToolMessage)
+        and isinstance(last_message.content, str)
+    ):
+        enc = tiktoken.encoding_for_model(model.value)
+        tokens = enc.encode(last_message.content)
+        if len(tokens) > config.token_truncate_limit:
+            last_message.content = enc.decode(tokens[: config.token_truncate_limit])
 
     return (
-        (
-            await client.complete(
-                messages=messages, temperature=0.8, top_p=0.9, max_tokens=1000, model=model.value
-            )
-        )
+        (await client.complete(messages=messages, model=model.value, **CHAT_PARAMS))
         .choices[0]
         .message
     )
@@ -281,45 +250,40 @@ async def _complete_chat(
     messages: list[ChatRequestMessage], model: AIModel, client: ChatCompletionsClient
 ) -> str:
     """
-    Asynchronously completes a chat conversation using the Azure ChatCompletions API.
-
-    Sends the list of chat messages to the API and processes any tool calls that may occur,
-    returning the content of the final response message.
+    Complete a chat conversation with tool handling.
 
     Args:
-        messages (list[ChatRequestMessage]): List of messages to be sent.
-        model (AIModel): The AI model to be utilized.
-        client (ChatCompletionsClient): Client instance for making the API request.
+        messages: List of conversation messages
+        model: AI model to use
+        client: Azure client for making API requests
 
     Returns:
-        str: The content of the response message obtained.
+        Text content of the final response
 
     Raises:
-        HttpResponseError: If an error occurs during the request or the response is invalid.
+        HttpResponseError: If API request fails
+        ValueError: If response is empty
     """
-
     tools = tool_manager.get_tool_definitions()
 
     try:
         response = await client.complete(
             messages=messages,
-            temperature=0.8,
-            top_p=0.9,
-            max_tokens=1000,
             model=model.value,
             tools=tools,
             tool_choice=ChatCompletionsToolChoicePreset.AUTO,
+            **CHAT_PARAMS,
         )
     except HttpResponseError as e:
         logger.error(
-            "HTTP response error during API request. Status code: %s (%s), Error message: %s",
+            "HTTP response error: Status %s (%s), Message: %s",
             e.status_code,
             e.reason,
             e.message,
         )
         raise
     except Exception as error:
-        logger.error("Unexpected error during API request with model %s: %s", model.value, error)
+        logger.error("Unexpected error with model %s: %s", model.value, error)
         raise
 
     selected_message: ChatResponseMessage = response.choices[0].message
@@ -328,7 +292,7 @@ async def _complete_chat(
         selected_message = await _process_tool_calls(messages, selected_message, client, model)
 
     if not selected_message.content:
-        msg = "Azure ChatCompletions API returned an empty or invalid response."
+        msg = "Azure ChatCompletions API returned an empty response."
         logger.error(msg)
         raise HttpResponseError(msg)
 
@@ -337,23 +301,21 @@ async def _complete_chat(
 
 async def query_azure_chat(
     messages: list[ChatRequestMessage], user: User, model: AIModel
-) -> tuple[str, AIModel]:
+) -> ModelResponse:
     """
-    Queries the Azure chat service using a list of messages and returns the response.
-
-    A system message is generated from the user and prepended to the provided messages before
-    sending the request via the Azure ChatCompletions API.
+    Query Azure chat service with fallback handling.
 
     Args:
-        messages (list[ChatRequestMessage]): List of messages for the query.
-        user (User): The user initiating the query.
-        model (AIModel): The AI model to be used for the conversation.
+        messages: Chat messages to send
+        user: User making the request
+        model: Primary AI model to try
 
     Returns:
-        tuple[str, AIModel]: The response from the Azure chat service and the model used.
+        Tuple of (response text, model actually used)
     """
     system_message = get_system_message(user)
     messages_with_system = [system_message, *messages]
+
     try:
         async with get_azure_client() as client:
             reply = await _complete_chat(messages_with_system, model, client)
@@ -361,6 +323,9 @@ async def query_azure_chat(
     except HttpResponseError as error:
         if error.status_code == 429 and model == AIModel.GPT_4O:
             fallback_model = AIModel.GPT_4O_MINI
+            logger.warning(
+                "Rate limited on %s, falling back to %s", model.value, fallback_model.value
+            )
             async with get_azure_client() as client:
                 reply = await _complete_chat(messages_with_system, fallback_model, client)
                 return reply, fallback_model
@@ -369,42 +334,39 @@ async def query_azure_chat(
 
 async def query_azure_chat_with_image(
     image_path: str, query_text: str, user: User, model: AIModel
-) -> tuple[str, AIModel]:
+) -> ModelResponse:
     """
-    Queries an Azure chat model with a combination of image and text.
-
-    If the provided model does not support images, a default model is used.
-    The image is read from the given path, processed, and sent along with a text query.
+    Query Azure chat with image and text.
 
     Args:
-        image_path (str): The file path to the image.
-        query_text (str): The text query to accompany the image.
-        user (User): The user initiating the query.
-        model (AIModel): The AI model to be used for the query.
+        image_path: Path to image file
+        query_text: Text to accompany the image
+        user: User making the request
+        model: AI model to use (must support images)
 
     Returns:
-        tuple[str, AIModel]: The response from the Azure chat service and the model used.
+        Tuple of (response text, model actually used)
     """
-    supported_models: set[AIModel] = {
-        AIModel.GPT_4O,
-        AIModel.GPT_4O_MINI,
-        AIModel.O1_PREVIEW,
-        AIModel.O3_MINI,
-    }
-
-    if model not in supported_models:
+    if model not in IMAGE_SUPPORTED_MODELS:
         model = DEFAULT_MODEL
 
     system_message = get_system_message(user)
-    message_text = TextContentItem(text=query_text)
+
+    message_content = []
+    if query_text:
+        message_content.append(TextContentItem(text=query_text))
+
     extension = Path(image_path).suffix[1:] or "jpg"
     image_item = ImageContentItem(
         image_url=ImageUrl.load(
             image_file=image_path, image_format=extension, detail=ImageDetailLevel.LOW
         )
     )
-    user_message = UserMessage(content=[message_text, image_item])
+    message_content.append(image_item)
+
+    user_message = UserMessage(content=message_content)
     messages = [system_message, user_message]
+
     try:
         async with get_azure_client() as client:
             reply = await _complete_chat(messages, model, client)
@@ -412,6 +374,9 @@ async def query_azure_chat_with_image(
     except HttpResponseError as error:
         if error.status_code == 429 and model == AIModel.GPT_4O:
             fallback_model = AIModel.GPT_4O_MINI
+            logger.warning(
+                "Rate limited on %s, falling back to %s", model.value, fallback_model.value
+            )
             async with get_azure_client() as client:
                 reply = await _complete_chat(messages, fallback_model, client)
                 return reply, fallback_model
