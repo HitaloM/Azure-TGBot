@@ -145,8 +145,8 @@ azure_client = ChatCompletionsClient(
     credential=AzureKeyCredential(config.azure_api_key.get_secret_value()),
     api_version="2025-03-01-preview",
     per_retry_policies=[CustomRetryPolicy()],
-    temperature=0.8,
-    top_p=0.9,
+    temperature=1.0,
+    top_p=1.0,
     max_tokens=1000,
 )
 
@@ -300,7 +300,6 @@ async def query_azure_chat(
     messages_with_system = [system_message, *messages]
 
     try:
-        # Usando o cliente global
         reply = await _complete_chat(messages_with_system, model, azure_client)
         return reply, model
     except HttpResponseError as error:
@@ -350,7 +349,6 @@ async def query_azure_chat_with_image(
     messages = [system_message, user_message]
 
     try:
-        # Usando o cliente global
         reply = await _complete_chat(messages, model, azure_client)
         return reply, model
     except HttpResponseError as error:
