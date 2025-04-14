@@ -17,6 +17,7 @@ from .filters.whitelist import WhiteListFilter
 from .handlers.ask import router as ask_router
 from .handlers.models import router as models_router
 from .handlers.reset import router as reset_router
+from .handlers.search import router as search_router
 from .middlewares import setup_middlewares, shutdown_middlewares
 
 logging.basicConfig(
@@ -49,12 +50,13 @@ async def main() -> None:
 
     # Register routers in the proper order
     # Order matters - router are executed in the order they are included
-    main_router.include_routers(reset_router, models_router, ask_router)
+    main_router.include_routers(reset_router, models_router, search_router, ask_router)
 
     dp.include_router(main_router)
 
     bot_commands = [
         BotCommand(command="/ai", description="Interact with AI"),
+        BotCommand(command="/search", description="Search the web with Bing"),
         BotCommand(command="/reset", description="Reset the conversation"),
     ]
 
