@@ -57,6 +57,8 @@ IMAGE_SUPPORTED_MODELS: set[AIModel] = {
     AIModel.O3_MINI,
 }
 
+INPUT_TOKEN_LIMIT = config.token_truncate_limit
+
 
 class CustomRetryPolicy(RetryPolicy):
     """
@@ -212,19 +214,261 @@ async def _process_tool_calls(
         )
 
         tool_response = await _execute_tool_call(function_name, function_args)
+
+        # Truncate tool response if too large
+        encoding_name = model.value if model != AIModel.GPT_4_1 else "gpt-4o"
+        try:
+            enc = tiktoken.encoding_for_model(encoding_name)
+        except KeyError:
+            enc = tiktoken.get_encoding("cl100k_base")
+
+        tokens = enc.encode(tool_response)
+        if len(tokens) > config.token_truncate_limit // 2:
+            logger.info(
+                "Truncating tool response from %d to %d tokens for model %s",
+                len(tokens),
+                config.token_truncate_limit // 2,
+                model.value,
+            )
+            tool_response = enc.decode(tokens[: config.token_truncate_limit // 2]) + "..."
+
         messages.append(ToolMessage(content=tool_response, tool_call_id=tool_call.id))
 
-    if model not in {AIModel.DEEPSEEK_V3, AIModel.DEEPSEEK_R1} and (
-        (last_message := messages[-1])
-        and isinstance(last_message, ToolMessage)
-        and isinstance(last_message.content, str)
-    ):
-        enc = tiktoken.encoding_for_model(model.value if not AIModel.GPT_4_1 else "gpt-4o")
-        tokens = enc.encode(last_message.content)
-        if len(tokens) > config.token_truncate_limit:
-            last_message.content = enc.decode(tokens[: config.token_truncate_limit])
+    # After processing all tool calls, truncate the entire conversation if needed
+    truncated_messages = _truncate_messages(messages, model)
+
+    # Replace the original messages with the truncated ones to maintain the limit
+    messages.clear()
+    messages.extend(truncated_messages)
 
     return (await client.complete(messages=messages, model=model.value)).choices[0].message
+
+
+def _truncate_content_by_tokens(content: str, model: AIModel, max_tokens: int) -> str:
+    """
+    Truncate content to a maximum token count.
+
+    Args:
+        content: Text content to truncate
+        model: AI model to determine token encoding
+        max_tokens: Maximum number of tokens to keep
+
+    Returns:
+        Truncated content that fits within token limit
+    """
+    encoding_name = model.value if model != AIModel.GPT_4_1 else "gpt-4o"
+    try:
+        enc = tiktoken.encoding_for_model(encoding_name)
+    except KeyError:
+        enc = tiktoken.get_encoding("cl100k_base")  # Default fallback encoding
+
+    tokens = enc.encode(content)
+    if len(tokens) <= max_tokens:
+        return content
+
+    logger.info(
+        "Truncating content from %d to %d tokens for model %s",
+        len(tokens),
+        max_tokens,
+        model.value,
+    )
+    return enc.decode(tokens[:max_tokens])
+
+
+def _get_message_token_count(message: ChatRequestMessage, model: AIModel) -> int:
+    """
+    Calculate token count for a message.
+
+    Args:
+        message: The message to calculate tokens for
+        model: AI model to determine token encoding
+
+    Returns:
+        Approximate token count
+    """
+    encoding_name = model.value if model != AIModel.GPT_4_1 else "gpt-4o"
+    try:
+        enc = tiktoken.encoding_for_model(encoding_name)
+    except KeyError:
+        enc = tiktoken.get_encoding("cl100k_base")
+
+    # Extract text content based on message type
+    text_content = ""
+    if isinstance(message, UserMessage) and message.content:
+        for item in message.content:
+            if isinstance(item, TextContentItem):
+                text_content += item.text or ""
+    elif (
+        isinstance(message, UserMessage)
+        and hasattr(message, "content")
+        and isinstance(message.content, str)
+    ):
+        text_content = message.content
+
+    return len(enc.encode(text_content))
+
+
+def _truncate_messages(
+    messages: list[ChatRequestMessage], model: AIModel
+) -> list[ChatRequestMessage]:
+    """
+    Truncate messages to fit within token limits.
+
+    This preserves the system message and recent messages while truncating older
+    user/assistant messages.
+
+    Args:
+        messages: List of messages in the conversation
+        model: AI model to use for token calculation
+
+    Returns:
+        Truncated list of messages that fits within the token limit
+    """
+    # Make a copy to avoid modifying the original
+    messages_copy = list(messages)
+
+    # First message is usually system message, keep it intact
+    if not messages_copy:
+        return messages_copy
+
+    system_message = messages_copy[0]
+
+    # If only system message or very few messages, no need to truncate
+    if len(messages_copy) <= 3:
+        return messages_copy
+
+    remaining_messages = messages_copy[1:]
+
+    # Calculate system message tokens
+    system_tokens = _get_message_token_count(system_message, model)
+    available_tokens = INPUT_TOKEN_LIMIT - system_tokens
+
+    # Extract and preserve newest messages
+    newest_messages = _extract_newest_messages(remaining_messages)
+    newest_tokens = sum(_get_message_token_count(msg, model) for msg in newest_messages)
+    available_tokens -= newest_tokens
+
+    # Process older messages within token constraints
+    kept_messages = _keep_messages_within_limit(
+        list(reversed(remaining_messages[: -len(newest_messages)])), available_tokens, model
+    )
+
+    # Reassemble the conversation: system message + kept messages + newest messages
+    truncated_messages = [system_message, *kept_messages, *newest_messages]
+
+    if len(truncated_messages) < len(messages):
+        logger.info(
+            "Truncated conversation from %d to %d messages to fit token limit",
+            len(messages),
+            len(truncated_messages),
+        )
+
+    return truncated_messages
+
+
+def _extract_newest_messages(messages: list[ChatRequestMessage]) -> list[ChatRequestMessage]:
+    """
+    Extract the most recent messages that should be preserved.
+
+    Args:
+        messages: List of conversation messages excluding system message
+
+    Returns:
+        List of newest messages to preserve
+    """
+    if not messages:
+        return []
+
+    newest = [messages[-1]]
+
+    # If there's a response to the last message, include it
+    if len(messages) >= 2 and isinstance(messages[-2], AssistantMessage):
+        newest.insert(0, messages[-2])
+
+    return newest
+
+
+def _keep_messages_within_limit(
+    reversed_messages: list[ChatRequestMessage], available_tokens: int, model: AIModel
+) -> list[ChatRequestMessage]:
+    """
+    Process messages to fit within token limit.
+
+    Args:
+        reversed_messages: Messages in reverse chronological order
+        available_tokens: Number of tokens available for these messages
+        model: AI model to use for token calculation
+
+    Returns:
+        List of messages that fit within the token limit, in correct chronological order
+    """
+    kept_messages = []
+
+    for message in reversed_messages:
+        message_tokens = _get_message_token_count(message, model)
+
+        if message_tokens <= available_tokens:
+            # Message fits completely
+            kept_messages.append(message)
+            available_tokens -= message_tokens
+        elif available_tokens > 0:
+            # Try to include a truncated version of the message
+            truncated_message = _try_truncate_message(message, available_tokens, model)
+            if truncated_message:
+                kept_messages.append(truncated_message)
+            available_tokens = 0
+            break
+
+        if available_tokens <= 0:
+            break
+
+    # Restore chronological order
+    kept_messages.reverse()
+    return kept_messages
+
+
+def _try_truncate_message(
+    message: ChatRequestMessage, available_tokens: int, model: AIModel
+) -> ChatRequestMessage | None:
+    """
+    Attempt to truncate a message to fit within available tokens.
+
+    Args:
+        message: Message to truncate
+        available_tokens: Number of tokens available
+        model: AI model to use for token calculation
+
+    Returns:
+        Truncated message or None if truncation not possible
+    """
+    # Reserve tokens for ellipsis
+    truncate_limit = available_tokens - 3
+    if truncate_limit <= 0:
+        return None
+
+    if isinstance(message, UserMessage) and isinstance(message.content, list):
+        # Handle UserMessage with content items
+        for i, item in enumerate(message.content):
+            if isinstance(item, TextContentItem) and item.text:
+                truncated_text = _truncate_content_by_tokens(item.text, model, truncate_limit)
+                if truncated_text != item.text:
+                    truncated_text += "..."
+                    # Create a new content list to avoid modifying the original
+                    new_content = list(message.content)
+                    new_content[i] = TextContentItem(text=truncated_text)
+                    return UserMessage(content=new_content)
+
+    elif isinstance(message, (UserMessage, AssistantMessage)) and isinstance(message.content, str):
+        # Handle messages with string content
+        truncated_content = _truncate_content_by_tokens(message.content, model, truncate_limit)
+        if truncated_content != message.content:
+            truncated_content += "..."
+            if isinstance(message, AssistantMessage):
+                return AssistantMessage(content=truncated_content)
+            return UserMessage(content=truncated_content)
+
+    # No truncation was possible
+    return None
 
 
 async def _complete_chat(
@@ -245,11 +489,17 @@ async def _complete_chat(
         HttpResponseError: If API request fails
         ValueError: If response is empty
     """
+    # Make a copy of messages to avoid modifying the original messages
+    message_copy = messages.copy()
+
+    # Truncate messages to prevent hitting token limits
+    truncated_messages = _truncate_messages(message_copy, model)
+
     tools = tool_manager.get_tool_definitions()
 
     try:
         response = await client.complete(
-            messages=messages,
+            messages=truncated_messages,
             model=model.value,
             tools=tools,
             tool_choice=ChatCompletionsToolChoicePreset.AUTO,
@@ -269,7 +519,9 @@ async def _complete_chat(
     selected_message: ChatResponseMessage = response.choices[0].message
 
     while hasattr(selected_message, "tool_calls") and selected_message.tool_calls:
-        selected_message = await _process_tool_calls(messages, selected_message, client, model)
+        selected_message = await _process_tool_calls(
+            truncated_messages, selected_message, client, model
+        )
 
     if not selected_message.content:
         msg = "Azure ChatCompletions API returned an empty response."
