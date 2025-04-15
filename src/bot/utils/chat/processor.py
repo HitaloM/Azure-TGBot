@@ -215,9 +215,8 @@ async def process_media_message(
             model,
         )
     except HttpResponseError as chat_err:
-        await message.answer(
-            clean_error_message(chat_err.message), reply_to_message_id=reply_to.message_id
-        )
+        error_message = clean_error_message(chat_err.message)
+        await message.answer(error_message, reply_to_message_id=reply_to.message_id)
         return
 
     if not response:
@@ -229,9 +228,9 @@ async def process_media_message(
     clean_response = clean_response_output(response)
     full_response = f"[✨ {used_model.value}] {clean_response}"
 
-    chunks = split_text_with_formatting(telegram_format(full_response))
+    chunks = split_text_with_formatting(full_response)
     for chunk in chunks:
-        await message.answer(chunk, reply_to_message_id=reply_to.message_id)
+        await message.answer(telegram_format(chunk), reply_to_message_id=reply_to.message_id)
 
     await save_message(message.from_user.id, clean_text, clean_response)  # type: ignore
 
@@ -283,9 +282,15 @@ async def process_and_reply(message: Message, *, clear: bool = False) -> None:
         "".join(response) if isinstance(response, list) else response
     )
 
-    chunks = split_text_with_formatting(telegram_format(clean_response))
+    if any(marker in clean_response for marker in ERROR_MARKERS):
+        await message.answer(clean_response, reply_to_message_id=reply_to_message.message_id)
+        return
+
+    chunks = split_text_with_formatting(clean_response)
     for chunk in chunks:
-        await message.answer(chunk, reply_to_message_id=reply_to_message.message_id)
+        await message.answer(
+            telegram_format(chunk), reply_to_message_id=reply_to_message.message_id
+        )
 
 
 async def process_message(message: Message, model: AIModel) -> ResponseType:
@@ -322,7 +327,7 @@ async def process_message(message: Message, model: AIModel) -> ResponseType:
     await save_message(user_id, text_content.strip(), reply_text)
 
     if len(full_response) > 4096:
-        return split_text_with_formatting(telegram_format(full_response))
+        return split_text_with_formatting(full_response)
 
     return full_response
 

@@ -121,9 +121,9 @@ async def process_and_send_response(
     if message.from_user:
         await save_message(message.from_user.id, user_query, clean_response)
 
-    chunks = split_text_with_formatting(telegram_format(full_response))
+        chunks = split_text_with_formatting(full_response)
     for chunk in chunks:
-        await message.answer(chunk)
+        await message.answer(telegram_format(chunk))
 
 
 async def search_and_respond(message: Message, clean_text: str) -> None:
