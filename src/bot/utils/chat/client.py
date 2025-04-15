@@ -145,9 +145,6 @@ azure_client = ChatCompletionsClient(
     credential=AzureKeyCredential(config.azure_api_key.get_secret_value()),
     api_version="2025-03-01-preview",
     per_retry_policies=[CustomRetryPolicy()],
-    temperature=1.0,
-    top_p=1.0,
-    max_tokens=1000,
 )
 
 
