@@ -19,6 +19,7 @@ from .handlers.models import router as models_router
 from .handlers.reset import router as reset_router
 from .handlers.search import router as search_router
 from .handlers.upgrade import router as upgrade_router
+from .handlers.whiteslist import router as whitelist_router
 from .middlewares import setup_middlewares, shutdown_middlewares
 
 logging.basicConfig(
@@ -52,7 +53,7 @@ async def main() -> None:
     # Register routers in the proper order
     # Order matters - router are executed in the order they are included
     main_router.include_routers(
-        reset_router, models_router, search_router, upgrade_router, ask_router
+        reset_router, models_router, search_router, upgrade_router, whitelist_router, ask_router
     )
 
     dp.include_router(main_router)

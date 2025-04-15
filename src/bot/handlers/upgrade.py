@@ -76,4 +76,4 @@ async def upgrade_confirm_callback(call: CallbackQuery) -> None:
     await asyncio.sleep(1)
 
     python = sys.executable
-    os.execl(python, python, *sys.argv)
+    os.execl(python, python, "-m", "src.bot")
