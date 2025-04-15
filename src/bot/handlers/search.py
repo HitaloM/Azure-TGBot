@@ -14,6 +14,7 @@ from azure.core.exceptions import HttpResponseError
 from chatgpt_md_converter import telegram_format
 
 from bot.utils.chat.client import azure_client
+from bot.utils.chat.client.rate_limiter import rate_limit_tracker
 from bot.utils.chat.models import AIModel
 from bot.utils.chat.response_processor import clean_response_output, save_message
 from bot.utils.chat.system_message import format_session_info, get_base_message
@@ -31,7 +32,6 @@ def get_system_message_without_tools(user: User) -> SystemMessage:
         return SystemMessage(content=get_base_message())
 
     base_message = get_base_message()
-
     pattern = r"# Tools\s+.*?namespace functions \{.*?\} // namespace functions"
     modified_message = re.sub(pattern, "", base_message, flags=re.DOTALL).strip()
 
@@ -49,29 +49,16 @@ def get_system_message_without_tools(user: User) -> SystemMessage:
     return SystemMessage(content=f"{modified_message}\n_session:\n{session_info}")
 
 
-async def execute_bing_search(query: str, user_prompt: str) -> dict[str, Any]:
+async def execute_search(query: str) -> dict[str, Any]:
     tool_instance = BingSearchTool()
     try:
-        return await tool_instance.run(query=query, user_prompt=user_prompt)
+        return await tool_instance.run(query=query, user_prompt=query)
     except Exception as e:
         logger.exception("[Search] - Error executing Bing search")
-        return {"error": f"Error during search: {e}", "user_prompt": user_prompt}
+        return {"error": f"Error during search: {e}", "user_prompt": query}
 
 
-def format_sources(results: list[dict[str, str]]) -> str:
-    if not results:
-        return "No sources found."
-
-    sources = []
-    for i, result in enumerate(results[:5], 1):  # Limit to top 5 sources
-        title = result.get("title", "Untitled")
-        url = result.get("url", "#")
-        sources.append(f"{i}. [{title}]({url})")
-
-    return "\n\n## Sources\n" + "\n".join(sources)
-
-
-def extract_context_from_results(results: list[dict[str, str]], max_results: int = 5) -> str:
+def extract_context(results: list[dict[str, str]], max_results: int = 5) -> str:
     context_parts = []
     for result in results[:max_results]:
         content = result.get("content", "").strip()
@@ -80,11 +67,23 @@ def extract_context_from_results(results: list[dict[str, str]], max_results: int
             context_parts.append(content)
         elif snippet:
             context_parts.append(snippet)
-
     return "\n\n".join(context_parts)
 
 
-def generate_search_prompt(query: str, context: str) -> str:
+def format_sources(results: list[dict[str, str]]) -> str:
+    if not results:
+        return "No sources found."
+
+    sources = []
+    for i, result in enumerate(results[:5], 1):
+        title = result.get("title", "Untitled")
+        url = result.get("url", "#")
+        sources.append(f"{i}. [{title}]({url})")
+
+    return "\n\n## Sources\n" + "\n".join(sources)
+
+
+def generate_prompt(query: str, context: str) -> str:
     return (
         f'I performed a web search for: "{query}"\n\n'
         f"Here are the relevant results:\n\n{context}\n\n"
@@ -93,7 +92,13 @@ def generate_search_prompt(query: str, context: str) -> str:
     )
 
 
-async def generate_ai_response(
+def select_best_model() -> AIModel:
+    if not rate_limit_tracker.is_rate_limited(AIModel.GPT_4_1):
+        return AIModel.GPT_4_1
+    return AIModel.GPT_4O_MINI
+
+
+async def generate_response(
     system_message: SystemMessage, prompt: str, model: AIModel
 ) -> str | None:
     messages = [system_message, UserMessage(content=prompt)]
@@ -104,36 +109,40 @@ async def generate_ai_response(
             model=model.value,
             tools=[],
         )
-        if response.choices:
-            return response.choices[0].message.content
-        return None
-    except Exception:
-        logger.exception("[Search] - Error generating AI response")
+        if not response.choices:
+            return None
+        return response.choices[0].message.content
+    except HttpResponseError as error:
+        if error.status_code == 429:
+            logger.warning("[Search] - Rate limit hit for model %s", model.value)
+            rate_limit_tracker.set_rate_limited(model, 300)
+        raise
+    except Exception as e:
+        logger.exception("[Search] - Unexpected error with %s: %s", model.value, str(e))
         return None
 
 
-async def process_and_send_response(
+async def send_response(
     message: Message, reply_text: str, sources_section: str, model: AIModel, user_query: str
 ) -> None:
+    if not message.from_user:
+        return
+
     clean_response = clean_response_output(reply_text)
     full_response = f"[🔍 {model.value}] {clean_response}\n{sources_section}"
 
-    if message.from_user:
-        await save_message(message.from_user.id, user_query, clean_response)
-
-        chunks = split_text_with_formatting(full_response)
+    await save_message(message.from_user.id, user_query, clean_response)
+    chunks = split_text_with_formatting(full_response)
     for chunk in chunks:
         await message.answer(telegram_format(chunk))
 
 
-async def search_and_respond(message: Message, clean_text: str) -> None:
+async def handle_search_request(message: Message, query: str) -> None:
     if not message.from_user:
         await message.answer("Error: User information not available.")
         return
 
-    model = AIModel.GPT_4_1
-
-    search_results = await execute_bing_search(clean_text, clean_text)
+    search_results = await execute_search(query)
     if "error" in search_results:
         await message.answer(f"Error: {search_results['error']}")
         return
@@ -143,29 +152,30 @@ async def search_and_respond(message: Message, clean_text: str) -> None:
         await message.answer("No search results found for your query.")
         return
 
-    combined_context = extract_context_from_results(results)
-
-    prompt = generate_search_prompt(clean_text, combined_context)
-
+    context = extract_context(results)
+    prompt = generate_prompt(query, context)
     system_message = get_system_message_without_tools(message.from_user)
-    logger.debug("[Search] - System message content: %s", system_message.content)
+
+    model = select_best_model()
+    reply_text = None
 
     try:
-        reply_text = await generate_ai_response(system_message, prompt, model)
-
-    except HttpResponseError as error:
-        if error.status_code == 429:
-            logger.warning("[Search] - Error with GPT-4.1, falling back to GPT-4o-mini")
+        reply_text = await generate_response(system_message, prompt, model)
+    except HttpResponseError:
+        if model != AIModel.GPT_4O_MINI:
+            logger.info("[Search] - Falling back to GPT-4o-mini")
             model = AIModel.GPT_4O_MINI
-            reply_text = await generate_ai_response(system_message, prompt, model)
+            try:
+                reply_text = await generate_response(system_message, prompt, model)
+            except Exception as e:
+                logger.exception("[Search] - Fallback also failed: %s", str(e))
 
     if not reply_text:
         await message.answer("Error generating response. Please try again later.")
         return
 
     sources_section = format_sources(results)
-
-    await process_and_send_response(message, reply_text, sources_section, model, clean_text)
+    await send_response(message, reply_text, sources_section, model, query)
 
 
 @router.message(Command("search"))
@@ -173,10 +183,10 @@ async def search_handler(message: Message, command: CommandObject) -> None:
     if not message.from_user:
         return
 
-    if command.args is None or not command.args.strip():
+    if not command.args or not command.args.strip():
         await message.answer(
             "Please provide a search query. Example: `/search latest AI developments`"
         )
         return
 
-    await search_and_respond(message, command.args)
+    await handle_search_request(message, command.args.strip())

@@ -62,6 +62,7 @@ async def main() -> None:
         BotCommand(command="/ai", description="Interact with AI"),
         BotCommand(command="/search", description="Search the web with Bing"),
         BotCommand(command="/reset", description="Reset the conversation"),
+        BotCommand(command="/models", description="List available AI models"),
     ]
 
     await bot.delete_my_commands()
