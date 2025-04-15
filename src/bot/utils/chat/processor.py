@@ -30,9 +30,8 @@ RE_SESSION = re.compile(r"^_session:.*?$", flags=re.MULTILINE)
 MODEL_MAPPING = {model.value.lower(): model for model in AIModel}
 MODEL_ALIAS_MAPPING = {
     # OpenAI aliases
-    "4o": AIModel.GPT_4O,
-    "gpt4o": AIModel.GPT_4O,
-    "4omini": AIModel.GPT_4O_MINI,
+    "gpt": AIModel.GPT_4_1,
+    "4o": AIModel.GPT_4O_MINI,
     "mini": AIModel.GPT_4O_MINI,
     "o1": AIModel.O1_PREVIEW,
     "o3": AIModel.O3_MINI,

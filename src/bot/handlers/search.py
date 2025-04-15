@@ -131,7 +131,7 @@ async def search_and_respond(message: Message, clean_text: str) -> None:
         await message.answer("Error: User information not available.")
         return
 
-    model = AIModel.GPT_4O
+    model = AIModel.GPT_4_1
 
     search_results = await execute_bing_search(clean_text, clean_text)
     if "error" in search_results:
@@ -155,7 +155,7 @@ async def search_and_respond(message: Message, clean_text: str) -> None:
 
     except HttpResponseError as error:
         if error.status_code == 429:
-            logger.warning("[Search] - Error with GPT-4o, falling back to GPT-4o-mini")
+            logger.warning("[Search] - Error with GPT-4.1, falling back to GPT-4o-mini")
             model = AIModel.GPT_4O_MINI
             reply_text = await generate_ai_response(system_message, prompt, model)
 

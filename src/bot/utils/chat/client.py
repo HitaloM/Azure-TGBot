@@ -48,10 +48,10 @@ logger = logging.getLogger(__name__)
 type ToolResult = dict[str, Any]
 type ModelResponse = tuple[str, AIModel]
 
-DEFAULT_MODEL = AIModel.GPT_4O
+DEFAULT_MODEL = AIModel.GPT_4_1
 
 IMAGE_SUPPORTED_MODELS: set[AIModel] = {
-    AIModel.GPT_4O,
+    AIModel.GPT_4_1,
     AIModel.GPT_4O_MINI,
     AIModel.O1_PREVIEW,
     AIModel.O3_MINI,
@@ -303,7 +303,7 @@ async def query_azure_chat(
         reply = await _complete_chat(messages_with_system, model, azure_client)
         return reply, model
     except HttpResponseError as error:
-        if error.status_code == 429 and model == AIModel.GPT_4O:
+        if error.status_code == 429 and model == DEFAULT_MODEL:
             fallback_model = AIModel.GPT_4O_MINI
             logger.warning(
                 "Rate limited on %s, falling back to %s", model.value, fallback_model.value
@@ -352,7 +352,7 @@ async def query_azure_chat_with_image(
         reply = await _complete_chat(messages, model, azure_client)
         return reply, model
     except HttpResponseError as error:
-        if error.status_code == 429 and model == AIModel.GPT_4O:
+        if error.status_code == 429 and model == DEFAULT_MODEL:
             fallback_model = AIModel.GPT_4O_MINI
             logger.warning(
                 "Rate limited on %s, falling back to %s", model.value, fallback_model.value

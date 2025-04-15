@@ -9,7 +9,7 @@ class AIModel(StrEnum):
     AIModel is an enumeration that represents various AI model identifiers.
 
     Attributes:
-        GPT_4O (str): Identifier for the GPT-4O model.
+        GPT_4_1 (str): Identifier for the GPT-4.1 model.
         GPT_4O_MINI (str): Identifier for the GPT-4O-Mini model.
         O1_PREVIEW (str): Identifier for the O1-Preview model.
         O3_MINI (str): Identifier for the O3-Mini model.
@@ -18,7 +18,7 @@ class AIModel(StrEnum):
     """
 
     # OpenAI models
-    GPT_4O = "gpt-4o"
+    GPT_4_1 = "gpt-4.1"
     GPT_4O_MINI = "gpt-4o-mini"
     O1_PREVIEW = "o1-preview"
     O3_MINI = "o3-mini"
