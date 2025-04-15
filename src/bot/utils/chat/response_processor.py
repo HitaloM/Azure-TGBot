@@ -11,12 +11,13 @@ from azure.ai.inference.models import UserMessage
 from azure.core.exceptions import HttpResponseError
 from chatgpt_md_converter import telegram_format
 
-from bot.database.models import Conversation
+from bot.database import prune_conversation_history, save_conversation
+from bot.database.operations import clear_user_conversation_history
 from bot.utils.text_splitter import split_text_with_formatting
 
 from .client import DEFAULT_MODEL, query_azure_chat, query_azure_chat_with_image
 from .context import build_reply_context
-from .history import clear_conversation_history, get_conversation_history
+from .history import get_conversation_history
 from .models import AIModel
 
 type ResponseType = list[str] | str | None
@@ -255,7 +256,7 @@ async def process_and_reply(message: Message, *, clear: bool = False) -> None:
         return
 
     if clear:
-        await clear_conversation_history(message.from_user.id)
+        await clear_user_conversation_history(message.from_user.id)
 
     target_message = (
         message.reply_to_message
@@ -348,13 +349,9 @@ async def save_message(user_id: int, user_msg: str, bot_resp: str) -> None:
         user_msg: User's message text
         bot_resp: Bot's response text
     """
-    await Conversation.create(user_id=user_id, user_message=user_msg, bot_response=bot_resp)
+    await save_conversation(user_id, user_msg, bot_resp)
 
-    records = await Conversation.filter(user_id=user_id).order_by("-timestamp").all()
-
-    if len(records) > 30:
-        ids_to_delete = [record.id for record in records[30:]]
-        await Conversation.filter(id__in=ids_to_delete).delete()
+    await prune_conversation_history(user_id, keep_count=30)
 
 
 def _split_code_blocks(text: str) -> list[str]:

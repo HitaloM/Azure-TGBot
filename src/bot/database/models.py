@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
-from tortoise import fields, models
+from datetime import datetime
+
+from sqlalchemy import BigInteger, DateTime, Index, Integer, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .connection import Base
 
 
-class Conversation(models.Model):
+class Conversation(Base):
     """
     Represents a conversation between a user and the bot.
 
@@ -16,14 +21,22 @@ class Conversation(models.Model):
         timestamp (datetime): The timestamp when the conversation occurred.
     """
 
-    id = fields.IntField(pk=True)
-    user_id = fields.BigIntField()
-    user_message = fields.TextField()
-    bot_response = fields.TextField()
-    timestamp = fields.DatetimeField(auto_now_add=True)
+    __tablename__ = "conversation"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    user_message: Mapped[str] = mapped_column(Text)
+    bot_response: Mapped[str] = mapped_column(Text)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (Index("idx_conversation_user_timestamp", "user_id", "timestamp"),)
+
+    def __repr__(self) -> str:
+        """String representation of the Conversation object."""
+        return f"<Conversation(id={self.id}, user_id={self.user_id}, timestamp={self.timestamp})>"
 
 
-class Whitelist(models.Model):
+class Whitelist(Base):
     """
     Represents a whitelist entry for allowed chats.
 
@@ -32,5 +45,11 @@ class Whitelist(models.Model):
         chat_id (int): The unique identifier of the chat, must be unique.
     """
 
-    id = fields.IntField(pk=True)
-    chat_id = fields.BigIntField(unique=True)
+    __tablename__ = "whitelist"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+
+    def __repr__(self) -> str:
+        """String representation of the Whitelist object."""
+        return f"<Whitelist(id={self.id}, chat_id={self.chat_id})>"

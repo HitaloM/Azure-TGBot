@@ -5,7 +5,7 @@ from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
-from bot.database.models import Whitelist
+from bot.database import add_to_whitelist, get_all_whitelist_entries, remove_from_whitelist
 from bot.filters.sudo import SudoFilter
 
 router = Router(name="whitelist")
@@ -29,11 +29,15 @@ async def change_whitelist(message: Message, command: CommandObject) -> None:
         return
 
     if command.command == "allow":
-        await Whitelist.get_or_create(chat_id=chat_id_int)
+        await add_to_whitelist(chat_id_int)
         await message.reply(f"Chat ID {chat_id} has been allowed to use the bot.")
+
     elif command.command == "disallow":
-        await Whitelist.filter(chat_id=chat_id_int).delete()
-        await message.reply(f"Chat ID {chat_id} has been disallowed to use the bot.")
+        removed = await remove_from_whitelist(chat_id_int)
+        if removed:
+            await message.reply(f"Chat ID {chat_id} has been disallowed to use the bot.")
+        else:
+            await message.reply(f"Chat ID {chat_id} was not in the whitelist.")
 
 
 @router.message(Command("list"))
@@ -41,7 +45,8 @@ async def list_whitelist(message: Message) -> None:
     if not message.from_user:
         return
 
-    entries = await Whitelist.all().values_list("chat_id", flat=True)
+    entries = await get_all_whitelist_entries()
+
     if not entries:
         await message.reply("No whitelist entries found.")
         return

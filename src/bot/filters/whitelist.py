@@ -6,7 +6,7 @@ from aiogram.filters import BaseFilter
 from aiogram.types import Message
 
 from bot import config
-from bot.database.models import Whitelist
+from bot.database import get_whitelist_entry
 
 
 class WhiteListFilter(BaseFilter):
@@ -51,6 +51,5 @@ class WhiteListFilter(BaseFilter):
             else message.from_user.id
         )
 
-        is_whitelisted = await Whitelist.get_or_none(chat_id=chat_id)
-
+        is_whitelisted = await get_whitelist_entry(chat_id)
         return bool(is_whitelisted)

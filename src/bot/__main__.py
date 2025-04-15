@@ -8,11 +8,10 @@ import uvloop
 from aiogram import Dispatcher, Router
 from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram.utils.chat_action import ChatActionMiddleware
-from tortoise import Tortoise
 
 from bot import bot
 
-from .database.connection import init_db
+from .database.connection import init_db, schedule_vacuum_optimization
 from .filters.whitelist import WhiteListFilter
 from .handlers.ask import router as ask_router
 from .handlers.models import router as models_router
@@ -29,6 +28,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+background_tasks = set()
+
 
 async def main() -> None:
     """
@@ -40,6 +41,10 @@ async def main() -> None:
     It also ensures that database connections are closed upon termination.
     """
     await init_db()
+
+    vacuum_task = asyncio.create_task(schedule_vacuum_optimization(24))
+    background_tasks.add(vacuum_task)
+    vacuum_task.add_done_callback(background_tasks.discard)
 
     main_router = Router(name="main-router")
     dp = Dispatcher(name="root-dispatcher")
@@ -73,8 +78,13 @@ async def main() -> None:
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        for task in background_tasks:
+            task.cancel()
+
+        if background_tasks:
+            await asyncio.gather(*background_tasks, return_exceptions=True)
+
         await shutdown_middlewares()
-        await Tortoise.close_connections()
 
 
 if __name__ == "__main__":

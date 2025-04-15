@@ -3,7 +3,7 @@
 
 from azure.ai.inference.models import AssistantMessage, UserMessage
 
-from bot.database.models import Conversation
+from bot.database import get_user_conversation_history
 
 type ChatHistory = list[AssistantMessage | UserMessage]
 
@@ -21,8 +21,7 @@ async def get_conversation_history(user_id: int) -> ChatHistory:
     Returns:
         List of alternating UserMessage and AssistantMessage objects
     """
-    records = await Conversation.filter(user_id=user_id).order_by("-timestamp").limit(30).all()
-    records.reverse()
+    records = await get_user_conversation_history(user_id)
 
     messages: ChatHistory = []
     for record in records:
@@ -30,16 +29,3 @@ async def get_conversation_history(user_id: int) -> ChatHistory:
         messages.append(AssistantMessage(content=record.bot_response))
 
     return messages
-
-
-async def clear_conversation_history(user_id: int) -> None:
-    """
-    Delete all conversation history for a user.
-
-    This function is typically used when the user wants to start a new conversation
-    without the context from previous interactions.
-
-    Args:
-        user_id: Unique identifier for the user
-    """
-    await Conversation.filter(user_id=user_id).delete()

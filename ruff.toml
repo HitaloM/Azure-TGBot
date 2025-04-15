@@ -49,6 +49,9 @@ notice-rgx = "(?i)Copyright \\(C\\) \\d{4}"
 [lint.flake8-tidy-imports]
 ban-relative-imports = "parents"
 
+[lint.per-file-ignores]
+"migrations/versions/*" = ["CPY"]
+
 [format]
 docstring-code-format = true
 preview = true
