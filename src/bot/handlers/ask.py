@@ -6,7 +6,7 @@ from aiogram.enums import ChatType
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from bot.utils.chat.processor import process_and_reply
+from bot.utils.chat.response_processor import process_and_reply
 
 router = Router(name="ask")
 

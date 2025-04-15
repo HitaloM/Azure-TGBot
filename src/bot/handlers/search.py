@@ -15,7 +15,7 @@ from chatgpt_md_converter import telegram_format
 
 from bot.utils.chat.client import azure_client
 from bot.utils.chat.models import AIModel
-from bot.utils.chat.processor import clean_response_output, save_message
+from bot.utils.chat.response_processor import clean_response_output, save_message
 from bot.utils.chat.system_message import format_session_info, get_base_message
 from bot.utils.chat.tools.bing_search import BingSearchTool
 from bot.utils.text_splitter import split_text_with_formatting
