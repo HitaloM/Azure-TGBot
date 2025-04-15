@@ -219,7 +219,7 @@ async def _process_tool_calls(
         and isinstance(last_message, ToolMessage)
         and isinstance(last_message.content, str)
     ):
-        enc = tiktoken.encoding_for_model(model.value)
+        enc = tiktoken.encoding_for_model(model.value if not AIModel.GPT_4_1 else "gpt-4o")
         tokens = enc.encode(last_message.content)
         if len(tokens) > config.token_truncate_limit:
             last_message.content = enc.decode(tokens[: config.token_truncate_limit])
