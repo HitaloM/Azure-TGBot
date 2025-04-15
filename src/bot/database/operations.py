@@ -38,12 +38,14 @@ async def add_to_whitelist(chat_id: int) -> Whitelist:
         result = await session.execute(stmt)
         existing = result.scalar_one_or_none()
 
-        if not existing:
-            async with session.begin():
-                whitelist_entry = Whitelist(chat_id=chat_id)
-                session.add(whitelist_entry)
-                return whitelist_entry
-        return existing
+        if existing:
+            return existing
+
+    async with async_session() as session, session.begin():
+        whitelist_entry = Whitelist(chat_id=chat_id)
+        session.add(whitelist_entry)
+        await session.flush()
+        return whitelist_entry
 
 
 async def remove_from_whitelist(chat_id: int) -> bool:
