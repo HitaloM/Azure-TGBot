@@ -34,8 +34,8 @@ MODEL_MAPPING = {model.value.lower(): model for model in AIModel}
 MODEL_ALIAS_MAPPING = {
     # OpenAI aliases
     "gpt": AIModel.GPT_4_1,
-    "4o": AIModel.GPT_4O_MINI,
-    "mini": AIModel.GPT_4O_MINI,
+    "mini": AIModel.GPT_4_1_MINI,
+    "nano": AIModel.GPT_4_1_NANO,
     "o1": AIModel.O1_PREVIEW,
     "o3": AIModel.O3_MINI,
     # DeepSeek aliases

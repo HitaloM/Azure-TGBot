@@ -95,7 +95,7 @@ def generate_prompt(query: str, context: str) -> str:
 def select_best_model() -> AIModel:
     if not rate_limit_tracker.is_rate_limited(AIModel.GPT_4_1):
         return AIModel.GPT_4_1
-    return AIModel.GPT_4O_MINI
+    return AIModel.GPT_4_1_MINI
 
 
 async def generate_response(
@@ -162,9 +162,9 @@ async def handle_search_request(message: Message, query: str) -> None:
     try:
         reply_text = await generate_response(system_message, prompt, model)
     except HttpResponseError:
-        if model != AIModel.GPT_4O_MINI:
+        if model != AIModel.GPT_4_1_MINI:
             logger.info("[Search] - Falling back to GPT-4o-mini")
-            model = AIModel.GPT_4O_MINI
+            model = AIModel.GPT_4_1_MINI
             try:
                 reply_text = await generate_response(system_message, prompt, model)
             except Exception as e:

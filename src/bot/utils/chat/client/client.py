@@ -38,7 +38,7 @@ DEFAULT_MODEL = AIModel.GPT_4_1
 
 IMAGE_SUPPORTED_MODELS: set[AIModel] = {
     AIModel.GPT_4_1,
-    AIModel.GPT_4O_MINI,
+    AIModel.GPT_4_1_MINI,
     AIModel.O1_PREVIEW,
     AIModel.O3_MINI,
 }
@@ -128,7 +128,7 @@ async def query_azure_chat(
 
     if rate_limit_tracker.is_rate_limited(model):
         wait_time = rate_limit_tracker.get_wait_time(model)
-        fallback_model = AIModel.GPT_4O_MINI
+        fallback_model = AIModel.GPT_4_1_MINI
         logger.warning(
             "Model %s is rate limited for %d more seconds, directly using fallback %s",
             model.value,
@@ -151,7 +151,7 @@ async def query_azure_chat(
 
             rate_limit_tracker.set_rate_limited(model, retry_seconds)
 
-            fallback_model = AIModel.GPT_4O_MINI
+            fallback_model = AIModel.GPT_4_1_MINI
             logger.warning(
                 "Rate limited on %s for %d seconds, falling back to %s",
                 model.value,
@@ -184,7 +184,7 @@ async def query_azure_chat_with_image(
 
     if rate_limit_tracker.is_rate_limited(model):
         wait_time = rate_limit_tracker.get_wait_time(model)
-        fallback_model = AIModel.GPT_4O_MINI
+        fallback_model = AIModel.GPT_4_1_MINI
         logger.warning(
             "Model %s is rate limited for %d more seconds, directly using fallback %s "
             "for image processing",
@@ -244,7 +244,7 @@ async def query_azure_chat_with_image(
 
             rate_limit_tracker.set_rate_limited(model, retry_seconds)
 
-            fallback_model = AIModel.GPT_4O_MINI
+            fallback_model = AIModel.GPT_4_1_MINI
             logger.warning(
                 "Rate limited on %s for %d seconds, falling back to %s for image processing",
                 model.value,
