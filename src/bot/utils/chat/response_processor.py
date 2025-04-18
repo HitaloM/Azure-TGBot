@@ -45,6 +45,7 @@ MODEL_ALIAS_MAPPING = {
     "v3": AIModel.DEEPSEEK_V3,
     "deepseekr1": AIModel.DEEPSEEK_R1,
     "r1": AIModel.DEEPSEEK_R1,
+    "mai": AIModel.MAI_DS_R1,
 }
 
 ERROR_MARKERS = ["(content_filter)", "(RateLimitReached)", "(tokens_limit_reached)"]
