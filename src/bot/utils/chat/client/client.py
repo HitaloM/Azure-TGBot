@@ -39,8 +39,8 @@ DEFAULT_MODEL = AIModel.GPT_4_1
 IMAGE_SUPPORTED_MODELS: set[AIModel] = {
     AIModel.GPT_4_1,
     AIModel.GPT_4_1_MINI,
-    AIModel.O1_PREVIEW,
-    AIModel.O3_MINI,
+    AIModel.O3,
+    AIModel.O4_MINI,
 }
 
 azure_client = ChatCompletionsClient(

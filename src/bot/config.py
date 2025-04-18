@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     bot_token: SecretStr
     azure_api_key: SecretStr
-    azure_endpoint: AnyHttpUrl = AnyHttpUrl("https://models.inference.ai.azure.com")
+    azure_endpoint: AnyHttpUrl = AnyHttpUrl("https://models.github.ai/inference")
     bing_api_key: SecretStr
     token_truncate_limit: int = 4000
     sudoers: list[int] = [918317361]

@@ -2,10 +2,5 @@
 data/config.env
 data/db.sqlite3*
 
-# rye
-.python-version
-requirements.lock
-requirements-dev.lock
-
 # python
 __pycache__/

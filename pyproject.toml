@@ -1,31 +1,37 @@
 [project]
 name = "bot"
 version = "1.0.0"
-description = "A conversational Telegram chatbot using Azure AI models."
+description = "A conversational Telegram chatbot using GitHub AI models."
 authors = [{ name = "Hitalo" }]
 dependencies = [
-    "aiogram[I18n,fast]>=3.19.0",
-    "aiohttp[speedups]>=3.11.14",
-    "azure-ai-inference>=1.0.0b9",
+    "aiogram[I18n,fast]>=3.20.0",
+    "aiohttp[speedups]>=3.11.16",
+    "github-ai-inference>=1.0.0b9",
     "tiktoken>=0.9.0",
-    "pydantic-settings>=2.8.1",
+    "pydantic-settings>=2.9.0",
     "orjson>=3.10.16",
-    "chatgpt-md-converter>=0.2.0",
-    "lxml>=5.3.1",
-    "sqlalchemy[asyncio]>=2.0.40",
+    "chatgpt-md-converter>=0.3.4",
+    "lxml>=5.3.2",
+    "sqlalchemy[aiosqlite,mypy]>=2.0.40",
     "alembic>=1.15.2",
-    "aiosqlite>=0.21.0",
 ]
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.13"
-keywords = ["telegram", "bot", "chatbot", "azure", "ai", "llm"]
+keywords = ["telegram", "bot", "chatbot", "github", "azure", "ai", "llm"]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Programming Language :: Python :: 3.13",
-    "License :: OSI Approved :: BSD License",
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Framework :: AsyncIO",
+    "Natural Language :: English",
     "Topic :: Communications :: Chat",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: BSD License",
+    "Intended Audience :: Developers",
     "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
 ]
 
 [project.urls]
@@ -37,6 +43,6 @@ Source = "https://github.com/HitaloM/Azure-TGBot"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.rye]
+[tool.uv]
 managed = true
-dev-dependencies = ["pre-commit>=4.2.0", "ruff>=0.11.2"]
+dev-dependencies = ["pre-commit>=4.2.0", "ruff>=0.11.6"]

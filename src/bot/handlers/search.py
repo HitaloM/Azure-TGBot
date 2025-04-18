@@ -163,7 +163,7 @@ async def handle_search_request(message: Message, query: str) -> None:
         reply_text = await generate_response(system_message, prompt, model)
     except HttpResponseError:
         if model != AIModel.GPT_4_1_MINI:
-            logger.info("[Search] - Falling back to GPT-4o-mini")
+            logger.info("[Search] - Falling back to GPT-4.1-mini")
             model = AIModel.GPT_4_1_MINI
             try:
                 reply_text = await generate_response(system_message, prompt, model)

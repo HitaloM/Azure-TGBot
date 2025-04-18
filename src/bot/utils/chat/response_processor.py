@@ -36,8 +36,8 @@ MODEL_ALIAS_MAPPING = {
     "gpt": AIModel.GPT_4_1,
     "mini": AIModel.GPT_4_1_MINI,
     "nano": AIModel.GPT_4_1_NANO,
-    "o1": AIModel.O1_PREVIEW,
-    "o3": AIModel.O3_MINI,
+    "o3": AIModel.O3,
+    "o4-mini": AIModel.O4_MINI,
     # DeepSeek aliases
     "deepseek": AIModel.DEEPSEEK_V3,  # Default to V3 when just "deepseek" is specified
     "deepseek-v3": AIModel.DEEPSEEK_V3,
@@ -45,6 +45,8 @@ MODEL_ALIAS_MAPPING = {
     "v3": AIModel.DEEPSEEK_V3,
     "deepseekr1": AIModel.DEEPSEEK_R1,
     "r1": AIModel.DEEPSEEK_R1,
+    # Microsoft alias
+    "mai": AIModel.MAI_DS_R1,
 }
 
 ERROR_MARKERS = ["(content_filter)", "(RateLimitReached)", "(tokens_limit_reached)"]
