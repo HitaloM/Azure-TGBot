@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "bot"
 version = "1.0.0"
@@ -6,7 +10,7 @@ authors = [{ name = "Hitalo" }]
 dependencies = [
     "aiogram[I18n,fast]>=3.20.0",
     "aiohttp[speedups]>=3.11.16",
-    "github-ai-inference>=1.0.0b9",
+    "azure-ai-inference>=1.0.0b9",
     "tiktoken>=0.9.0",
     "pydantic-settings>=2.9.0",
     "orjson>=3.10.16",
@@ -18,31 +22,7 @@ dependencies = [
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.13"
-keywords = ["telegram", "bot", "chatbot", "github", "azure", "ai", "llm"]
-classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Environment :: Console",
-    "Framework :: AsyncIO",
-    "Natural Language :: English",
-    "Topic :: Communications :: Chat",
-    "Operating System :: OS Independent",
-    "License :: OSI Approved :: BSD License",
-    "Intended Audience :: Developers",
-    "Intended Audience :: End Users/Desktop",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.13",
-]
-
-[project.urls]
-Documentation = "https://github.com/HitaloM/Azure-TGBot"
-Issues = "https://github.com/HitaloM/Azure-TGBot/issues"
-Source = "https://github.com/HitaloM/Azure-TGBot"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 
 [tool.uv]
 managed = true
-dev-dependencies = ["pre-commit>=4.2.0", "ruff>=0.11.6"]
+dev-dependencies = ["pre-commit>=4.2.0", "ruff>=0.11.7"]
