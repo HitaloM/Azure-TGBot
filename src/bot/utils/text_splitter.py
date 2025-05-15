@@ -64,6 +64,9 @@ class TextSplitter:
         Returns:
             A list with the text parts.
         """
+        if len(text) <= max_length:
+            return [text]
+
         result = []
         current_text = text
 
