@@ -234,9 +234,13 @@ async def process_media_message(
         return
 
     clean_response = clean_response_output(response)
-    full_response = f"[✨ {used_model.value}] {clean_response}"
 
-    chunks = split_text_with_formatting(full_response)
+    # Split the response without model prefix
+    chunks = split_text_with_formatting(clean_response)
+    if chunks:
+        # Add model prefix only to the first chunk
+        chunks[0] = f"[✨ {used_model.value}] {chunks[0]}"
+
     for chunk in chunks:
         await message.answer(telegram_format(chunk), reply_to_message_id=reply_to.message_id)
 
@@ -294,7 +298,12 @@ async def process_and_reply(message: Message, *, clear: bool = False) -> None:
         await message.answer(clean_response, reply_to_message_id=reply_to_message.message_id)
         return
 
+    # Split response preserving formatting
     chunks = split_text_with_formatting(clean_response)
+    if chunks and "[✨" not in chunks[0][:10]:
+        # Add model prefix only to the first chunk (if necessary)
+        chunks[0] = f"[✨ {model.value}] {chunks[0]}"
+
     for chunk in chunks:
         await message.answer(
             telegram_format(chunk), reply_to_message_id=reply_to_message.message_id
@@ -335,6 +344,15 @@ async def process_message(message: Message, model: AIModel) -> ResponseType:
     await save_message(user_id, text_content.strip(), reply_text)
 
     if len(full_response) > 4096:
+        # Extract the model prefix and text content
+        model_prefix_match = re.match(r"^\[✨\s+([^\]]+)\]\s+", full_response)
+        if model_prefix_match:
+            prefix = model_prefix_match.group(0)
+            content = full_response[len(prefix) :]
+            chunks = split_text_with_formatting(content)
+            if chunks:
+                chunks[0] = f"{prefix}{chunks[0]}"
+            return chunks
         return split_text_with_formatting(full_response)
 
     return full_response
