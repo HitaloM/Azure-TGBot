@@ -74,21 +74,25 @@ def format_sources(results: list[dict[str, str]]) -> str:
     if not results:
         return "No sources found."
 
+    seen = set()
     sources = []
-    for i, result in enumerate(results[:5], 1):
-        title = result.get("title", "Untitled")
+    for idx, result in enumerate(results[:5], 1):
         url = result.get("url", "#")
-        sources.append(f"{i}. [{title}]({url})")
+        if url in seen:
+            continue
+        seen.add(url)
+        title = result.get("title", "Untitled")
+        sources.append(f"{idx}. [{title}]({url})")
 
-    return "\n\n## Sources\n" + "\n".join(sources)
+    return "\n\n<b>Sources:</b>\n" + "\n".join(sources)
 
 
 def generate_prompt(query: str, context: str) -> str:
     return (
-        f'I performed a web search for: "{query}"\n\n'
-        f"Here are the relevant results:\n\n{context}\n\n"
-        f"Based on these search results, please provide a comprehensive answer to my "
-        f"original query. DO NOT include a sources section at the end - I will add this myself."
+        f'Web search for: "{query}".\n'
+        f"Relevant results (summarize concisely):\n{context}\n\n"
+        f"Answer the query using only these results. Be concise and clear. "
+        f"Do not include a sources section."
     )
 
 
@@ -129,27 +133,26 @@ async def send_response(
         return
 
     clean_response = clean_response_output(reply_text)
-    full_response = f"[🔍 {model.value}] {clean_response}\n{sources_section}"
+    full_response = f"[🔍 {model.value}] {clean_response}\n\n{sources_section}"
 
     await save_message(message.from_user.id, user_query, clean_response)
     chunks = split_text_with_formatting(full_response)
     for chunk in chunks:
-        await message.answer(telegram_format(chunk))
+        await message.answer(telegram_format(chunk), parse_mode="HTML")
 
 
 async def handle_search_request(message: Message, query: str) -> None:
     if not message.from_user:
-        await message.answer("Error: User information not available.")
         return
 
     search_results = await execute_search(query)
     if "error" in search_results:
-        await message.answer(f"Error: {search_results['error']}")
+        await message.answer(f"Search error: {search_results['error']}")
         return
 
     results = search_results.get("results", [])
     if not results:
-        await message.answer("No search results found for your query.")
+        await message.answer("No results found for your query.")
         return
 
     context = extract_context(results)
@@ -171,7 +174,7 @@ async def handle_search_request(message: Message, query: str) -> None:
                 logger.exception("[Search] - Fallback also failed: %s", str(e))
 
     if not reply_text:
-        await message.answer("Error generating response. Please try again later.")
+        await message.answer("Could not generate a response. Please try again later.")
         return
 
     sources_section = format_sources(results)
@@ -184,9 +187,7 @@ async def search_handler(message: Message, command: CommandObject) -> None:
         return
 
     if not command.args or not command.args.strip():
-        await message.answer(
-            "Please provide a search query. Example: `/search latest AI developments`"
-        )
+        await message.answer("Send a search query. Example: /search latest AI developments")
         return
 
     await handle_search_request(message, command.args.strip())
