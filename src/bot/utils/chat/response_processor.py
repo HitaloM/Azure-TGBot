@@ -47,6 +47,8 @@ MODEL_ALIAS_MAPPING = {
     "r1": AIModel.DEEPSEEK_R1,
     # Microsoft alias
     "mai": AIModel.MAI_DS_R1,
+    # xAI aliases
+    "grok": AIModel.GROK_3,
 }
 
 ERROR_MARKERS = ["(content_filter)", "(RateLimitReached)", "(tokens_limit_reached)"]

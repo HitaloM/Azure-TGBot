@@ -17,6 +17,7 @@ class AIModel(StrEnum):
         DEEPSEEK_V3 (str): Identifier for the DeepSeek-V3-0324 model.
         DEEPSEEK_R1 (str): Identifier for the DeepSeek-R1 model.
         MAI_DS_R1 (str): Identifier for the MAI-DS-R1 model.
+        GROK_3 (str): Identifier for the Grok-3 model.
     """
 
     # OpenAI models
@@ -32,6 +33,9 @@ class AIModel(StrEnum):
 
     # Microsoft models
     MAI_DS_R1 = "microsoft/MAI-DS-R1"
+
+    # xAI models
+    GROK_3 = "xai/grok-3"
 
     @classmethod
     def list_models(cls) -> list[str]:
