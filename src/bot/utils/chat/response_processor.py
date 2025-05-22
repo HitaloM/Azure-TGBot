@@ -196,7 +196,7 @@ async def process_media_message(
     Process messages with media content using Azure's image processing capabilities.
 
     Downloads media files, sends them to Azure API with any caption text,
-    and responds with the AI-generated reply.
+    and responds with the AI-generated reply. Maintains conversation history.
 
     Args:
         message: The triggering message
@@ -204,6 +204,9 @@ async def process_media_message(
         reply_to: The message to reply to
     """
     if not is_media_message(target_message):
+        return
+
+    if not message.from_user:
         return
 
     query_text = target_message.caption
@@ -217,12 +220,26 @@ async def process_media_message(
     local_filename = Path(tempfile.gettempdir()) / Path(file_obj.file_path).name  # type: ignore
     await target_message.bot.download_file(file_obj.file_path, destination=local_filename)  # type: ignore
 
+    # Get conversation history for the user, similar to process_message
+    user_id = message.from_user.id
+    chat_history = await get_conversation_history(user_id)
+
+    image_caption = clean_text or "[Image without caption]"
+
     try:
+        if reply_to and reply_to != target_message:
+            updated_prompt, chat_history = build_reply_context(
+                message, image_caption, chat_history
+            )
+        else:
+            updated_prompt = image_caption
+
         response, used_model = await query_azure_chat_with_image(
             str(local_filename),
-            clean_text,
-            message.from_user,  # type: ignore
+            updated_prompt,
+            message.from_user,
             model,
+            chat_history,
         )
     except HttpResponseError as chat_err:
         error_message = clean_error_message(chat_err.message)
@@ -246,7 +263,7 @@ async def process_media_message(
     for chunk in chunks:
         await message.answer(telegram_format(chunk), reply_to_message_id=reply_to.message_id)
 
-    await save_message(message.from_user.id, clean_text, clean_response)  # type: ignore
+    await save_message(user_id, image_caption, clean_response)
 
 
 async def process_and_reply(message: Message, *, clear: bool = False) -> None:

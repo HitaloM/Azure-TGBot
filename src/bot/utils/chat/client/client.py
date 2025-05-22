@@ -20,6 +20,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
 
 from bot import config
+from bot.utils.chat.history import ChatHistory
 from bot.utils.chat.models import AIModel
 from bot.utils.chat.system_message import get_system_message
 from bot.utils.chat.tools.tool_manager import tool_manager
@@ -165,7 +166,11 @@ async def query_azure_chat(
 
 
 async def query_azure_chat_with_image(
-    image_path: str, query_text: str, user: User, model: AIModel
+    image_path: str,
+    query_text: str,
+    user: User,
+    model: AIModel,
+    history: ChatHistory | None = None,
 ) -> ModelResponse:
     """
     Query Azure chat with image and text.
@@ -175,6 +180,7 @@ async def query_azure_chat_with_image(
         query_text: Text to accompany the image
         user: User making the request
         model: AI model to use (must support images)
+        history: Optional chat history to include in the context
 
     Returns:
         Tuple of (response text, model actually used)
@@ -182,44 +188,9 @@ async def query_azure_chat_with_image(
     if model not in IMAGE_SUPPORTED_MODELS:
         model = DEFAULT_MODEL
 
-    if rate_limit_tracker.is_rate_limited(model):
-        wait_time = rate_limit_tracker.get_wait_time(model)
-        fallback_model = AIModel.GPT_4_1_MINI
-        logger.warning(
-            "Model %s is rate limited for %d more seconds, directly using fallback %s "
-            "for image processing",
-            model.value,
-            wait_time,
-            fallback_model.value,
-        )
-
-        system_message = get_system_message(user)
-        message_content = []
-        if query_text:
-            message_content.append(TextContentItem(text=query_text))
-
-        extension = Path(image_path).suffix[1:] or "jpg"
-        image_item = ImageContentItem(
-            image_url=ImageUrl.load(
-                image_file=image_path, image_format=extension, detail=ImageDetailLevel.LOW
-            )
-        )
-        message_content.append(image_item)
-
-        user_message = UserMessage(content=message_content)
-        messages = [system_message, user_message]
-
-        try:
-            reply = await complete_chat(messages, fallback_model, azure_client)
-            return reply, fallback_model
-        except Exception as error:
-            logger.error(
-                "Error using fallback model %s for image: %s", fallback_model.value, error
-            )
-            raise
-
     system_message = get_system_message(user)
 
+    # Create the image message content
     message_content = []
     if query_text:
         message_content.append(TextContentItem(text=query_text))
@@ -231,9 +202,32 @@ async def query_azure_chat_with_image(
         )
     )
     message_content.append(image_item)
-
     user_message = UserMessage(content=message_content)
-    messages = [system_message, user_message]
+
+    # Build message array with system message, optional history, and the current message
+    if history:
+        messages = [system_message, *history, user_message]
+    else:
+        messages = [system_message, user_message]
+
+    if rate_limit_tracker.is_rate_limited(model):
+        wait_time = rate_limit_tracker.get_wait_time(model)
+        fallback_model = AIModel.GPT_4_1_MINI
+        logger.warning(
+            "Model %s is rate limited for %d more seconds, directly using fallback %s "
+            "for image processing",
+            model.value,
+            wait_time,
+            fallback_model.value,
+        )
+        try:
+            reply = await complete_chat(messages, fallback_model, azure_client)
+            return reply, fallback_model
+        except Exception as error:
+            logger.error(
+                "Error using fallback model %s for image: %s", fallback_model.value, error
+            )
+            raise
 
     try:
         reply = await complete_chat(messages, model, azure_client)
