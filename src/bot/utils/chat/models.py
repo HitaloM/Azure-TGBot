@@ -36,6 +36,7 @@ class AIModel(StrEnum):
 
     # xAI models
     GROK_3 = "xai/grok-3"
+    GROK_3_MINI = "xai/grok-3-mini"
 
     @classmethod
     def list_models(cls) -> list[str]:
