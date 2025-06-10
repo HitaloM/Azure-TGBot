@@ -29,7 +29,7 @@ class AIModel(StrEnum):
 
     # DeepSeek models
     DEEPSEEK_V3 = "deepseek/DeepSeek-V3-0324"
-    DEEPSEEK_R1 = "deepseek/DeepSeek-R1"
+    DEEPSEEK_R1 = "deepseek/DeepSeek-R1-0528"
 
     # Microsoft models
     MAI_DS_R1 = "microsoft/MAI-DS-R1"
