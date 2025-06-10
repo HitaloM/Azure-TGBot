@@ -183,16 +183,45 @@ class BingSearchTool(BaseTool):
     """
 
     name = "bing-search"
-    description = "Search the web using Bing."
+    description = (
+        "Search the web using the Bing search engine. Returns the top web search results for "
+        "the user's query. This function is appropriate under the following circumstances: "
+        "The user's query pertains to recent events or information that is frequently updated; "
+        "The user's query is about new developments, trends, or technologies; The user's query "
+        "is extremely specific, detailed, or pertains to a niche subject not likely to be "
+        "covered in your knowledge base; The user explicitly requests a web search; The user "
+        "is NOT asking about code in a specific GitHub repository, any other GitHub resource, "
+        "or a GitHub code search."
+    )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "freshness": {
             "type": "string",
-            "description": "Recency of results (Day, Week, Month).",
+            "description": (
+                "Freshness refers to the date that Bing originally discovered the website, not "
+                "when the publisher published the website. Valid values: '' - return websites "
+                "that Bing discovered at any time, 'month' - return websites that Bing "
+                "discovered within the last 30 days, 'week' - return websites that Bing "
+                "discovered within the last 7 days, 'day' - return websites discovered by Bing "
+                "within the last 24 hours. An empty string is the default value for this "
+                "parameter in the Bing API. Default to returning an empty string as the value "
+                "for freshness. An empty string is always a good value to use for this "
+                "parameter. An empty string is almost always the desired value. Only specify a "
+                "non-empty string in the rare case when the user is requesting news articles "
+                "or blog posts created on or within a date range."
+            ),
             "enum": ["Day", "Week", "Month", ""],
             "default": "",
         },
-        "query": {"type": "string", "description": "Search term."},
-        "user_prompt": {"type": "string", "description": "User input."},
+        "query": {
+            "type": "string",
+            "description": (
+                "A query string based on the user's request. Rewrite and optimize the query "
+                "for an effective Bing web search. Prefer using Bing's 'site' operator if you "
+                "know the answer to the user's query can be found on a specific site. "
+                "Examples: 'site:github.com', '(site:github.com OR site:docs.github.com)'"
+            ),
+        },
+        "user_prompt": {"type": "string", "description": "The user's exact prompt."},
     }
     required_parameters: ClassVar[list[str]] = ["query", "user_prompt"]
 

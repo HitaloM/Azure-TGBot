@@ -2,7 +2,6 @@
 # Copyright (c) 2025 Hitalo M. <https://github.com/HitaloM>
 
 import logging
-import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -31,15 +30,11 @@ def get_system_message_without_tools(user: User) -> SystemMessage:
     if not user or not user.full_name:
         return SystemMessage(content=get_base_message())
 
-    base_message = get_base_message()
-    pattern = r"# Tools\s+.*?namespace functions \{.*?\} // namespace functions"
-    modified_message = re.sub(pattern, "", base_message, flags=re.DOTALL).strip()
-
     search_note = (
         "\n\n# Search\n\nYou will respond based only on the web search results provided. "
         "Do not use your training data."
     )
-    modified_message += search_note
+    modified_message = get_base_message() + search_note
 
     current_utc = datetime.now(UTC).strftime("%d-%m-%Y %H:%M:%S")
     language_code = user.language_code or "Unknown"

@@ -198,7 +198,7 @@ def clean_error_message(message: str) -> str:
     """
     for marker in ERROR_MARKERS:
         if marker in message:
-            return message.split("\n")[0].replace(marker, "").strip()
+            return message.split("\n", 1)[0].replace(marker, "").strip()
     return message
 
 

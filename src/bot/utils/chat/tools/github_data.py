@@ -21,25 +21,45 @@ class GitHubDataTool(BaseTool):
     """
 
     name = "get-github-data"
-    description = "GET data from GitHub's REST API."
+    description = (
+        "This tool provides GET-only access to GitHub's REST API, enabling structured queries "
+        "for GitHub resources like repositories, issues, pull requests, and content."
+    )
     parameters_schema: ClassVar[dict[str, Any]] = {
         "endpoint": {
             "type": "string",
-            "description": "GitHub REST API endpoint (include leading slash).",
+            "description": (
+                "A full valid GitHub REST API endpoint to call via a GET request. "
+                "Include the leading slash."
+            ),
         },
         "endpoint_description": {
             "type": "string",
-            "description": "Short API operation description.",
+            "description": (
+                "A short description of the GitHub API operation. This should be generic, and "
+                "not mention any particular entities. For example, 'get repo' or 'search pull "
+                "requests' or 'list releases in repo'. Prefer 'search' over 'list' for issues "
+                "and pull requests."
+            ),
             "default": "",
         },
         "repo": {
             "type": "string",
-            "description": "Repository name (owner/repo).",
+            "description": (
+                "The 'owner/repo' name of the repository that's being used in the endpoint. "
+                "If this isn't used in the endpoint, send an empty string."
+            ),
             "default": "",
         },
         "task": {
             "type": "string",
-            "description": "Task description.",
+            "description": (
+                "A phrase describing the task to be accomplished with the GitHub REST API. "
+                "For example, 'search for issues assigned to user monalisa' or 'get pull "
+                "request number 42 in repo facebook/react' or 'list releases in repo "
+                "kubernetes/kubernetes'. If the user is asking about data in a particular "
+                "repo, that repo should be specified."
+            ),
             "default": "",
         },
     }
