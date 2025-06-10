@@ -77,12 +77,15 @@ async def get_all_whitelist_entries() -> list[int]:
         return [row[0] for row in result.all()]
 
 
-async def save_conversation(user_id: int, user_message: str, bot_response: str) -> Conversation:
+async def save_conversation(
+    user_id: int, chat_id: int, user_message: str, bot_response: str
+) -> Conversation:
     """
     Save a conversation exchange to the database.
 
     Args:
         user_id: The user ID
+        chat_id: The chat ID (group or private chat)
         user_message: The user's message
         bot_response: The bot's response
 
@@ -91,18 +94,19 @@ async def save_conversation(user_id: int, user_message: str, bot_response: str) 
     """
     async with async_session() as session, session.begin():
         conversation = Conversation(
-            user_id=user_id, user_message=user_message, bot_response=bot_response
+            user_id=user_id, chat_id=chat_id, user_message=user_message, bot_response=bot_response
         )
         session.add(conversation)
         return conversation
 
 
-async def prune_conversation_history(user_id: int, keep_count: int = 30) -> int:
+async def prune_conversation_history(user_id: int, chat_id: int, keep_count: int = 30) -> int:
     """
-    Prune conversation history to keep only the latest entries.
+    Prune conversation history to keep only the latest entries for a specific chat.
 
     Args:
         user_id: The user ID
+        chat_id: The chat ID (group or private chat)
         keep_count: Number of latest messages to keep
 
     Returns:
@@ -111,7 +115,7 @@ async def prune_conversation_history(user_id: int, keep_count: int = 30) -> int:
     async with async_session() as session:
         subq = (
             select(Conversation.id)
-            .where(Conversation.user_id == user_id)
+            .where(Conversation.user_id == user_id, Conversation.chat_id == chat_id)
             .order_by(Conversation.timestamp.desc())
             .limit(keep_count)
             .scalar_subquery()
@@ -119,18 +123,23 @@ async def prune_conversation_history(user_id: int, keep_count: int = 30) -> int:
 
         async with session.begin():
             stmt = delete(Conversation).where(
-                Conversation.user_id == user_id, Conversation.id.not_in(subq)
+                Conversation.user_id == user_id,
+                Conversation.chat_id == chat_id,
+                Conversation.id.not_in(subq),
             )
             result = await session.execute(stmt)
             return result.rowcount
 
 
-async def get_user_conversation_history(user_id: int, limit: int = 30) -> list[Conversation]:
+async def get_user_conversation_history(
+    user_id: int, chat_id: int, limit: int = 30
+) -> list[Conversation]:
     """
-    Get conversation history for a user.
+    Get conversation history for a user in a specific chat.
 
     Args:
         user_id: The user ID
+        chat_id: The chat ID (group or private chat)
         limit: Maximum number of conversations to retrieve
 
     Returns:
@@ -139,7 +148,7 @@ async def get_user_conversation_history(user_id: int, limit: int = 30) -> list[C
     async with async_session() as session:
         stmt = (
             select(Conversation)
-            .where(Conversation.user_id == user_id)
+            .where(Conversation.user_id == user_id, Conversation.chat_id == chat_id)
             .order_by(Conversation.timestamp.desc())
             .limit(limit)
         )
@@ -148,18 +157,25 @@ async def get_user_conversation_history(user_id: int, limit: int = 30) -> list[C
         return list(reversed(records))
 
 
-async def clear_user_conversation_history(user_id: int) -> int:
+async def clear_user_conversation_history(user_id: int, chat_id: int | None = None) -> int:
     """
     Clear conversation history for a user.
 
     Args:
         user_id: The user ID
+        chat_id: Optional chat ID. If provided, clears only that chat's history.
+                If None, clears all chats for the user.
 
     Returns:
         Number of rows deleted
     """
     async with async_session() as session, session.begin():
-        stmt = delete(Conversation).where(Conversation.user_id == user_id)
+        if chat_id is not None:
+            stmt = delete(Conversation).where(
+                Conversation.user_id == user_id, Conversation.chat_id == chat_id
+            )
+        else:
+            stmt = delete(Conversation).where(Conversation.user_id == user_id)
         result = await session.execute(stmt)
         return result.rowcount
 

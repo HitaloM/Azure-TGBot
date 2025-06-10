@@ -330,7 +330,8 @@ async def process_media_message(
     try:
         local_filename = await _download_media_file(target_message, file_obj)
         user_id = message.from_user.id
-        chat_history = await get_conversation_history(user_id)
+        chat_id = message.chat.id
+        chat_history = await get_conversation_history(user_id, chat_id)
         image_caption = clean_text or "[Image without caption]"
 
         if reply_to and reply_to != target_message:
@@ -359,7 +360,7 @@ async def process_media_message(
 
         clean_response = clean_response_output(response)
         await _send_chunked_response(message, clean_response, used_model, reply_to)
-        await save_message(user_id, image_caption, clean_response)
+        await save_message(user_id, chat_id, image_caption, clean_response)
 
     except HttpResponseError as chat_err:
         error_message = clean_error_message(chat_err.message)
@@ -507,7 +508,8 @@ async def process_message(message: Message, model: AIModel) -> ResponseType:
         return None
 
     user_id = message.from_user.id
-    chat_history = await get_conversation_history(user_id)
+    chat_id = message.chat.id
+    chat_history = await get_conversation_history(user_id, chat_id)
     updated_prompt, chat_history = build_reply_context(
         message,
         text_content.strip(),
@@ -525,7 +527,7 @@ async def process_message(message: Message, model: AIModel) -> ResponseType:
     except HttpResponseError as chat_err:
         return clean_error_message(chat_err.message)
 
-    await save_message(user_id, text_content.strip(), reply_text)
+    await save_message(user_id, chat_id, text_content.strip(), reply_text)
 
     if len(full_response) > MAX_TELEGRAM_MESSAGE_LENGTH:
         return _split_long_response(full_response)
@@ -533,19 +535,20 @@ async def process_message(message: Message, model: AIModel) -> ResponseType:
     return full_response
 
 
-async def save_message(user_id: int, user_message: str, bot_response: str) -> None:
+async def save_message(user_id: int, chat_id: int, user_message: str, bot_response: str) -> None:
     """Save conversation exchange to database and prune history if needed.
 
-    Maintains a rolling history of the last N messages per user to prevent
+    Maintains a rolling history of the last N messages per user per chat to prevent
     database bloat while preserving recent context.
 
     Args:
         user_id: User identifier
+        chat_id: Chat identifier (group or private)
         user_message: User's message text
         bot_response: Bot's response text
     """
-    await save_conversation(user_id, user_message, bot_response)
-    await prune_conversation_history(user_id, keep_count=CONVERSATION_HISTORY_LIMIT)
+    await save_conversation(user_id, chat_id, user_message, bot_response)
+    await prune_conversation_history(user_id, chat_id, keep_count=CONVERSATION_HISTORY_LIMIT)
 
 
 def _split_code_blocks(text: str) -> list[str]:

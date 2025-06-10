@@ -235,7 +235,9 @@ class MessageHandler:
 
         full_response = self.formatter.format_full_response(reply_text, sources_section, model)
 
-        await save_message(message.from_user.id, user_query, clean_response_output(reply_text))
+        await save_message(
+            message.from_user.id, message.chat.id, user_query, clean_response_output(reply_text)
+        )
         chunks = split_text_with_formatting(full_response)
         for chunk in chunks:
             await message.reply(telegram_format(chunk), parse_mode="HTML")

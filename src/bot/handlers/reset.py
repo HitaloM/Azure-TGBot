@@ -16,8 +16,8 @@ async def reset_handler(message: Message) -> None:
     if not message.from_user:
         return
 
-    await clear_user_conversation_history(message.from_user.id)
-    await message.reply("History cleared.")
+    await clear_user_conversation_history(message.from_user.id, message.chat.id)
+    await message.reply("History cleared for this chat.")
 
 
 @router.message(Command(commands=["resetall", "fuckall"]), SudoFilter())
