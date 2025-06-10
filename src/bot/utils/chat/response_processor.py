@@ -298,7 +298,7 @@ async def _send_chunked_response(
         chunks[0] = f"[✨ {used_model.value}] {chunks[0]}"
 
     for chunk in chunks:
-        await message.answer(telegram_format(chunk), reply_to_message_id=reply_to.message_id)
+        await message.reply(telegram_format(chunk), reply_to_message_id=reply_to.message_id)
 
 
 async def process_media_message(
@@ -324,7 +324,7 @@ async def process_media_message(
 
     file_obj = await _get_media_file(target_message)
     if not file_obj:
-        await message.answer("Media file not found.", reply_to_message_id=reply_to.message_id)
+        await message.reply("Media file not found.", reply_to_message_id=reply_to.message_id)
         return
 
     try:
@@ -351,7 +351,7 @@ async def process_media_message(
         )
 
         if not response:
-            await message.answer(
+            await message.reply(
                 "Could not generate a response.",
                 reply_to_message_id=reply_to.message_id,
             )
@@ -363,7 +363,7 @@ async def process_media_message(
 
     except HttpResponseError as chat_err:
         error_message = clean_error_message(chat_err.message)
-        await message.answer(error_message, reply_to_message_id=reply_to.message_id)
+        await message.reply(error_message, reply_to_message_id=reply_to.message_id)
 
 
 def _determine_target_and_reply_messages(message: Message) -> tuple[Message, Message]:
@@ -403,7 +403,7 @@ async def _handle_text_message_processing(
 
     response = await process_message(updated_message, model)
     if not response:
-        await message.answer(
+        await message.reply(
             "Could not generate a response.",
             reply_to_message_id=reply_to_message.message_id,
         )
@@ -414,7 +414,7 @@ async def _handle_text_message_processing(
     )
 
     if any(marker in clean_response for marker in ERROR_MARKERS):
-        await message.answer(clean_response, reply_to_message_id=reply_to_message.message_id)
+        await message.reply(clean_response, reply_to_message_id=reply_to_message.message_id)
         return
 
     chunks = split_text_with_formatting(clean_response)
@@ -422,7 +422,7 @@ async def _handle_text_message_processing(
         chunks[0] = f"[✨ {model.value}] {chunks[0]}"
 
     for chunk in chunks:
-        await message.answer(
+        await message.reply(
             telegram_format(chunk),
             reply_to_message_id=reply_to_message.message_id,
         )

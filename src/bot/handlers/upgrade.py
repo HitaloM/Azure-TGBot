@@ -40,13 +40,13 @@ async def upgrade_handler(message: Message) -> None:
 
     commits = get_git_commits()
     if not commits:
-        await message.answer("No updates available.")
+        await message.reply("No updates available.")
         return
 
     kb = InlineKeyboardBuilder()
     kb.button(text="Upgrade & Restart", callback_data=UpgradeCallbackFactory(action="confirm"))
 
-    await message.answer(
+    await message.reply(
         f"New commits available:\n<pre>{commits}</pre>", reply_markup=kb.as_markup()
     )
 
