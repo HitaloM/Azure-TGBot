@@ -68,6 +68,11 @@ FALLBACK_MODEL = AIModel.GPT_4_1_MINI
 IMAGE_SUPPORTED_MODELS: set[AIModel] = {
     AIModel.GPT_4_1,
     AIModel.GPT_4_1_MINI,
+    # GPT-5 models support image processing
+    AIModel.GPT_5,
+    AIModel.GPT_5_MINI,
+    AIModel.GPT_5_NANO,
+    AIModel.GPT_5_CHAT,
     AIModel.O3,
     AIModel.O4_MINI,
 }

@@ -46,6 +46,18 @@ MODEL_ALIAS_MAPPING: dict[str, AIModel] = {
     "nano": AIModel.GPT_4_1_NANO,
     "o3": AIModel.O3,
     "o4-mini": AIModel.O4_MINI,
+    # GPT-5 aliases (new models)
+    "gpt5": AIModel.GPT_5,
+    "gpt-5": AIModel.GPT_5,
+    "gpt5-mini": AIModel.GPT_5_MINI,
+    "gpt-5-mini": AIModel.GPT_5_MINI,
+    "gpt5mini": AIModel.GPT_5_MINI,
+    "gpt5-nano": AIModel.GPT_5_NANO,
+    "gpt-5-nano": AIModel.GPT_5_NANO,
+    "gpt5nano": AIModel.GPT_5_NANO,
+    "gpt5-chat": AIModel.GPT_5_CHAT,
+    "gpt-5-chat": AIModel.GPT_5_CHAT,
+    "gpt5chat": AIModel.GPT_5_CHAT,
     # DeepSeek aliases
     "deepseek": AIModel.DEEPSEEK_V3,
     "deepseek-v3": AIModel.DEEPSEEK_V3,
