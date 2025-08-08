@@ -68,6 +68,7 @@ FALLBACK_MODEL = AIModel.GPT_4_1_MINI
 IMAGE_SUPPORTED_MODELS: set[AIModel] = {
     AIModel.GPT_4_1,
     AIModel.GPT_4_1_MINI,
+    AIModel.GPT_5,
     AIModel.O3,
     AIModel.O4_MINI,
 }

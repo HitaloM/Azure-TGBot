@@ -42,6 +42,8 @@ MODEL_MAPPING: dict[str, AIModel] = {model.value.lower(): model for model in AIM
 MODEL_ALIAS_MAPPING: dict[str, AIModel] = {
     # OpenAI aliases
     "gpt": AIModel.GPT_4_1,
+    "gpt5": AIModel.GPT_5,
+    "gpt-5": AIModel.GPT_5,
     "mini": AIModel.GPT_4_1_MINI,
     "nano": AIModel.GPT_4_1_NANO,
     "o3": AIModel.O3,
